@@ -3,7 +3,7 @@
 // ============================================================
 
 const API_BASE = '/api';
-const AUTH_BASE = '/auth';
+const BASE_URL = import.meta.env.PROD ? 'http://72.61.214.92:3000' : '';
 
 interface FetchOptions extends RequestInit {
   params?: Record<string, string>;
@@ -12,7 +12,9 @@ interface FetchOptions extends RequestInit {
 async function request<T>(url: string, options: FetchOptions = {}): Promise<T> {
   const { params, ...fetchOptions } = options;
 
-  let fullUrl = url.startsWith('/auth') ? url : `${API_BASE}${url}`;
+  let fullUrl = url.startsWith('/auth') 
+    ? `${BASE_URL}${url}` 
+    : `${BASE_URL}${API_BASE}${url}`;
   if (params) {
     const searchParams = new URLSearchParams(params);
     fullUrl += `?${searchParams}`;
