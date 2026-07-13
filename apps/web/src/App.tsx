@@ -16,6 +16,7 @@ import AdminTransactions from './pages/AdminTransactions';
 import AdminExpenses from './pages/AdminExpenses';
 import DevSettings from './pages/DevSettings';
 import { Toaster } from 'react-hot-toast';
+import UpdateChecker from './components/UpdateChecker';
 
 function ProtectedRoute({ children, allowedRoles }: { children: React.ReactNode; allowedRoles?: string[] }) {
   const { isAuthenticated, user, isLoading } = useAuthStore();
@@ -52,6 +53,7 @@ export default function App() {
   return (
     <BrowserRouter>
       <Toaster position="top-right" toastOptions={{ className: 'react-hot-toast' }} />
+      <UpdateChecker />
       <Routes>
         {/* Public */}
         <Route path="/login" element={<LoginPage />} />
