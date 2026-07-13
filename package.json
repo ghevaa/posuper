@@ -13,7 +13,7 @@
     "dev:desktop": "npx tauri dev -d apps/desktop",
     "build:api": "npm run build -w apps/api",
     "build:web": "npm run build -w apps/web",
-    "build:desktop": "npx tauri build -d apps/desktop",
+    "build:desktop": "cd apps/desktop && npx tauri build",
     "build:android": "npm run build -w apps/web && npx cap sync android -w apps/web",
     "android:open": "npx cap open android -w apps/web",
     "db:generate": "npm run db:generate -w apps/api",
@@ -28,5 +28,8 @@
   },
   "dependencies": {
     "drizzle-orm": "^0.45.2"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "^2.11.4"
   }
 }

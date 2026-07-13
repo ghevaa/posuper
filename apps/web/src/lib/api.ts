@@ -3,7 +3,7 @@
 // ============================================================
 
 const API_BASE = '/api';
-const BASE_URL = import.meta.env.PROD ? 'http://72.61.214.92:3000' : '';
+const BASE_URL = import.meta.env.PROD ? 'http://72.61.214.92:8080' : '';
 
 interface FetchOptions extends RequestInit {
   params?: Record<string, string>;
