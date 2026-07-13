@@ -11,8 +11,8 @@ WORKDIR /app
 COPY package.json tsconfig.base.json package-lock.json* ./
 
 # Copy packages & apps packages
-COPY packages/packages/config ./packages/config
-COPY packages/packages/types ./packages/types
+COPY packages/config ./packages/config
+COPY packages/types ./packages/types
 COPY apps/api ./apps/api
 
 # Install dependencies (workspaces auto-resolved)
@@ -27,8 +27,8 @@ FROM node:22-alpine AS runner
 WORKDIR /app
 
 COPY package.json package-lock.json* ./
-COPY packages/packages/config/package.json ./packages/config/package.json
-COPY packages/packages/types/package.json ./packages/types/package.json
+COPY packages/config/package.json ./packages/config/package.json
+COPY packages/types/package.json ./packages/types/package.json
 COPY apps/api/package.json ./apps/api/package.json
 
 # Install prod dependencies
