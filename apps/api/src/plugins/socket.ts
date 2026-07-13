@@ -7,9 +7,13 @@ import { Server } from 'socket.io';
 import type { ServerToClientEvents, ClientToServerEvents } from '@pos-yoga/types';
 
 export async function socketPlugin(app: FastifyInstance) {
+  const corsOrigins = process.env.CORS_ORIGIN
+    ? process.env.CORS_ORIGIN.split(',').map((o) => o.trim())
+    : ['http://localhost:5173'];
+
   const io = new Server<ClientToServerEvents, ServerToClientEvents>(app.server, {
     cors: {
-      origin: process.env.CORS_ORIGIN || 'http://localhost:5173',
+      origin: corsOrigins,
       methods: ['GET', 'POST'],
     },
   });
