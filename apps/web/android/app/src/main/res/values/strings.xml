@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">POS Yoga</string>
+    <string name="title_activity_main">POS Yoga</string>
+    <string name="package_name">com.posyoga.app</string>
+    <string name="custom_url_scheme">com.posyoga.app</string>
+</resources>

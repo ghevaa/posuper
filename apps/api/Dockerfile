@@ -1,0 +1,51 @@
+# ============================================================
+# POS Yoga — Production API Dockerfile
+# ============================================================
+
+# Step 1: Base image
+FROM node:22-alpine AS builder
+
+WORKDIR /app
+
+# Copy root configurations
+COPY package.json tsconfig.base.json package-lock.json* ./
+
+# Copy packages & apps packages
+COPY packages/packages/config ./packages/config
+COPY packages/packages/types ./packages/types
+COPY apps/api ./apps/api
+
+# Install dependencies (workspaces auto-resolved)
+RUN npm ci --legacy-peer-deps
+
+# Build typescript projects
+RUN npm run build -w apps/api
+
+# Step 2: Runtime image
+FROM node:22-alpine AS runner
+
+WORKDIR /app
+
+COPY package.json package-lock.json* ./
+COPY packages/packages/config/package.json ./packages/config/package.json
+COPY packages/packages/types/package.json ./packages/types/package.json
+COPY apps/api/package.json ./apps/api/package.json
+
+# Install prod dependencies
+RUN npm ci --omit=dev --legacy-peer-deps
+
+# Copy builds
+COPY --from=builder /app/packages/config/dist ./packages/config/dist
+COPY --from=builder /app/packages/types/dist ./packages/types/dist
+COPY --from=builder /app/apps/api/dist ./apps/api/dist
+COPY --from=builder /app/apps/api/drizzle.config.ts ./apps/api/drizzle.config.ts
+COPY --from=builder /app/apps/api/drizzle ./apps/api/drizzle
+
+# Env
+ENV NODE_ENV=production
+ENV PORT=3000
+ENV HOST=0.0.0.0
+
+EXPOSE 3000
+
+CMD ["node", "apps/api/dist/index.js"]

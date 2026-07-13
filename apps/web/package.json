@@ -1,0 +1,41 @@
+{
+  "name": "@pos-yoga/web",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc -b && vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "@pos-yoga/config": "*",
+    "@pos-yoga/types": "*",
+    "@tanstack/react-query": "^5.62.0",
+    "dayjs": "^1.11.0",
+    "lucide-react": "^0.468.0",
+    "react": "^19.2.7",
+    "react-dom": "^19.2.7",
+    "react-hot-toast": "^2.4.1",
+    "react-router-dom": "^6.28.0",
+    "recharts": "^2.12.7",
+    "socket.io-client": "^4.8.1",
+    "zustand": "^5.0.2"
+  },
+  "devDependencies": {
+    "@capacitor/android": "^8.4.1",
+    "@capacitor/cli": "^8.4.1",
+    "@capacitor/core": "^8.4.1",
+    "@rolldown/binding-win32-x64-msvc": "^1.1.4",
+    "@tailwindcss/vite": "^4.0.0-beta.8",
+    "@types/node": "^22.10.1",
+    "@types/react": "^19.2.17",
+    "@types/react-dom": "^19.2.3",
+    "@vitejs/plugin-react": "^6.0.3",
+    "autoprefixer": "^10.4.20",
+    "postcss": "^8.4.49",
+    "tailwindcss": "^4.0.0-beta.8",
+    "typescript": "~5.8.0",
+    "vite": "^8.1.1"
+  }
+}

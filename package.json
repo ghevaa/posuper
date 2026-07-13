@@ -1,0 +1,32 @@
+{
+  "name": "pos-yoga",
+  "version": "1.0.0",
+  "private": true,
+  "description": "POS Yoga - Point of Sale System",
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
+  "scripts": {
+    "dev:api": "npm run dev -w apps/api",
+    "dev:web": "npm run dev -w apps/web",
+    "dev:desktop": "npx tauri dev -d apps/desktop",
+    "build:api": "npm run build -w apps/api",
+    "build:web": "npm run build -w apps/web",
+    "build:desktop": "npx tauri build -d apps/desktop",
+    "build:android": "npm run build -w apps/web && npx cap sync android -w apps/web",
+    "android:open": "npx cap open android -w apps/web",
+    "db:generate": "npm run db:generate -w apps/api",
+    "db:migrate": "npm run db:migrate -w apps/api",
+    "db:seed": "npm run db:seed -w apps/api",
+    "db:studio": "npm run db:studio -w apps/api",
+    "docker:up": "docker compose up -d",
+    "docker:down": "docker compose down"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "drizzle-orm": "^0.45.2"
+  }
+}

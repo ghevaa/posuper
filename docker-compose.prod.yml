@@ -1,0 +1,66 @@
+services:
+  api:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    container_name: pos-yoga-api-prod
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      - DATABASE_URL=postgresql://postgres:posyogaprodpassword2024@postgres:5432/pos_yoga
+      - PORT=3000
+      - HOST=0.0.0.0
+      - BETTER_AUTH_SECRET=change-this-to-a-secure-random-key-in-prod-1234
+      - BETTER_AUTH_URL=https://api.posyoga.com
+      - CORS_ORIGIN=https://posyoga.com
+      - NODE_ENV=production
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
+
+  postgres:
+    image: postgres:16-alpine
+    container_name: pos-yoga-db-prod
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: posyogaprodpassword2024
+      POSTGRES_DB: pos_yoga
+    volumes:
+      - postgres_prod_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: pos-yoga-redis-prod
+    restart: unless-stopped
+    volumes:
+      - redis_prod_data:/data
+
+  # Automated DB Backup service
+  db-backup:
+    image: prodrigestivill/postgres-backup-local:16
+    container_name: pos-yoga-db-backup
+    restart: unless-stopped
+    environment:
+      - POSTGRES_HOST=postgres
+      - POSTGRES_DB=pos_yoga
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=posyogaprodpassword2024
+      - BACKUP_NUM_KEEP=7
+      - BACKUP_FREQUENCY=1d
+    volumes:
+      - ./backups:/backups
+    depends_on:
+      - postgres
+
+volumes:
+  postgres_prod_data:
+  redis_prod_data:
