@@ -18,6 +18,8 @@ import { settingsRoutes } from './routes/settings.routes.js';
 import { reportRoutes } from './routes/reports.routes.js';
 import { backupRoutes } from './routes/backup.routes.js';
 import { socketPlugin } from './plugins/socket.js';
+import { db } from './db/index.js';
+import * as schema from './db/schema.js';
 
 const app = Fastify({
   logger: {
@@ -26,6 +28,52 @@ const app = Fastify({
 });
 
 async function start() {
+  // Run migrations in production
+  try {
+    console.log('Running database migrations...');
+    const { migrate } = await import('drizzle-orm/node-postgres/migrator');
+    const path = await import('path');
+    await migrate(db, {
+      migrationsFolder: path.join(process.cwd(), 'apps/api/drizzle'),
+    });
+    console.log('Database migrations completed successfully!');
+  } catch (migError) {
+    console.error('Failed to run database migrations:', migError);
+  }
+
+  // Seed default admin user and settings if database is empty
+  try {
+    const userCount = await db.select({ count: schema.user.id }).from(schema.user).limit(1);
+    if (userCount.length === 0) {
+      console.log('🌱 Database is empty. Running auto-seeding...');
+      
+      // 1. Seed settings
+      const { DEFAULT_SETTINGS } = await import('@pos-yoga/config');
+      const { nanoid } = await import('nanoid');
+      for (const [key, value] of Object.entries(DEFAULT_SETTINGS)) {
+        await db.insert(schema.settings).values({
+          id: nanoid(),
+          key,
+          value,
+        }).onConflictDoNothing();
+      }
+      
+      // 2. Seed default admin user
+      console.log('  → Seeding default admin user...');
+      const { auth } = await import('./auth.js');
+      await auth.api.signUpEmail({
+        body: {
+          email: 'admin@posyoga.com',
+          password: 'admin123',
+          name: 'Administrator',
+          role: 'developer',
+        },
+      });
+      console.log('Default admin user created successfully!');
+    }
+  } catch (seedError) {
+    console.error('Failed to auto-seed database:', seedError);
+  }
   // CORS
   const corsOrigins = process.env.CORS_ORIGIN
     ? process.env.CORS_ORIGIN.split(',').map((o) => o.trim())
