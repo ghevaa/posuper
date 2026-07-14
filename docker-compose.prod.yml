@@ -5,21 +5,15 @@ services:
       dockerfile: apps/api/Dockerfile
     container_name: pos-yoga-api-prod
     restart: unless-stopped
-    networks:
-      - dokploy-network
-      - default
-    labels:
-      - "traefik.enable=true"
-      - "traefik.http.routers.pos-yoga-api.rule=Host(`api.72.61.214.92.sslip.io`)"
-      - "traefik.http.routers.pos-yoga-api.entrypoints=web"
-      - "traefik.http.services.pos-yoga-api.loadbalancer.server.port=3000"
+    ports:
+      - "8080:3000"
     environment:
       - DATABASE_URL=postgresql://postgres:posyogaprodpassword2024@postgres:5432/pos_yoga
       - PORT=3000
       - HOST=0.0.0.0
       - BETTER_AUTH_SECRET=8d4f9b8c5e2a1d0f7b6c3e9a0d8f7e6c5b4a3f2e1d0c9b8a7f6e5d4c3b2a1f0e
-      - BETTER_AUTH_URL=http://api.72.61.214.92.sslip.io
-      - CORS_ORIGIN=http://api.72.61.214.92.sslip.io,http://72.61.214.92,tauri://localhost,http://tauri.localhost
+      - BETTER_AUTH_URL=http://72.61.214.92:8080
+      - CORS_ORIGIN=http://72.61.214.92:8080,http://72.61.214.92,tauri://localhost,http://tauri.localhost
       - NODE_ENV=production
     depends_on:
       postgres:
@@ -67,9 +61,6 @@ services:
     depends_on:
       - postgres
 
-networks:
-  dokploy-network:
-    external: true
 
 volumes:
   postgres_prod_data:
