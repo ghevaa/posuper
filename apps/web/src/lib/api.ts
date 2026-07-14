@@ -3,7 +3,7 @@
 // ============================================================
 
 const API_BASE = '/api';
-const BASE_URL = import.meta.env.PROD ? 'http://72.61.214.92:3000' : '';
+const BASE_URL = import.meta.env.PROD ? 'http://api.72.61.214.92.sslip.io' : '';
 
 // --- Tauri Detection & Token Management ---
 const IS_TAURI = typeof window !== 'undefined' && !!(window as any).__TAURI_INTERNALS__;
