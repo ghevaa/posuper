@@ -36,8 +36,17 @@ export const useAuthStore = create<AuthState>((set) => ({
   },
 
   logout: async () => {
-    await authApi.logout();
-    set({ user: null, isAuthenticated: false });
+    try {
+      await authApi.logout();
+    } catch (err) {
+      console.error('Server-side logout failed:', err);
+      // Ensure token is cleared locally anyway
+      try {
+        localStorage.removeItem('pos_yoga_session_token');
+      } catch { /* ignore */ }
+    } finally {
+      set({ user: null, isAuthenticated: false });
+    }
   },
 
   checkSession: async () => {
