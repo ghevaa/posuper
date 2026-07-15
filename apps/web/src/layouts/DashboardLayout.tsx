@@ -107,7 +107,10 @@ export default function DashboardLayout() {
             </div>
             <div className="flex-1 min-w-0">
               <p className="text-sm font-medium truncate">{user?.name}</p>
-              <p className="text-[11px] text-[var(--color-text-dim)] truncate">{user?.email}</p>
+              <p className="text-[11px] text-[var(--color-text-dim)] truncate flex items-center justify-between">
+                <span>{user?.email}</span>
+                <span className="text-[9px] bg-[var(--color-surface-lighter)] text-[var(--color-text-dim)] px-1 rounded font-mono">v0.1.1</span>
+              </p>
             </div>
           </div>
           <button onClick={handleLogout} className="btn btn-ghost w-full text-left text-sm">
