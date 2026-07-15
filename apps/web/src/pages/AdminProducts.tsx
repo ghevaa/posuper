@@ -9,10 +9,17 @@ import { formatCurrency } from '../lib/utils';
 import { Plus, Pencil, Trash2, X, Loader2 } from 'lucide-react';
 import toast from 'react-hot-toast';
 
+interface ProductVariant {
+  id?: string;
+  name: string;
+  additionalPrice: string;
+}
+
 interface Product {
   id: string; name: string; sku: string | null; barcode: string | null;
   price: string; cost: string; stock: number; image: string | null;
   categoryId: string | null; isActive: boolean;
+  variants?: ProductVariant[];
 }
 interface Category { id: string; name: string; }
 
@@ -20,6 +27,7 @@ export default function AdminProducts() {
   const [showForm, setShowForm] = useState(false);
   const [editing, setEditing] = useState<Product | null>(null);
   const [form, setForm] = useState({ name: '', price: '', cost: '', stock: '', barcode: '', sku: '', categoryId: '' });
+  const [variants, setVariants] = useState<ProductVariant[]>([]);
 
   const qc = useQueryClient();
   const { data: productsRes, isLoading } = useQuery({ queryKey: ['products'], queryFn: () => api.get<{ data: Product[] }>('/products') });
@@ -43,13 +51,37 @@ export default function AdminProducts() {
     onSuccess: () => { qc.invalidateQueries({ queryKey: ['products'] }); toast.success('Produk dihapus'); },
   });
 
-  const openCreate = () => { setEditing(null); setForm({ name: '', price: '', cost: '', stock: '', barcode: '', sku: '', categoryId: '' }); setShowForm(true); };
-  const openEdit = (p: Product) => { setEditing(p); setForm({ name: p.name, price: p.price, cost: p.cost, stock: String(p.stock), barcode: p.barcode || '', sku: p.sku || '', categoryId: p.categoryId || '' }); setShowForm(true); };
-  const closeForm = () => { setShowForm(false); setEditing(null); };
+  const openCreate = () => {
+    setEditing(null);
+    setForm({ name: '', price: '', cost: '', stock: '', barcode: '', sku: '', categoryId: '' });
+    setVariants([]);
+    setShowForm(true);
+  };
+  const openEdit = (p: Product) => {
+    setEditing(p);
+    setForm({ name: p.name, price: p.price, cost: p.cost, stock: String(p.stock), barcode: p.barcode || '', sku: p.sku || '', categoryId: p.categoryId || '' });
+    setVariants(p.variants ? p.variants.map((v) => ({ id: v.id, name: v.name, additionalPrice: String(Number(v.additionalPrice)) })) : []);
+    setShowForm(true);
+  };
+  const closeForm = () => {
+    setShowForm(false);
+    setEditing(null);
+    setVariants([]);
+  };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    const data = { ...form, price: Number(form.price), cost: Number(form.cost), stock: Number(form.stock), categoryId: form.categoryId || null };
+    const data = {
+      ...form,
+      price: Number(form.price),
+      cost: Number(form.cost),
+      stock: Number(form.stock),
+      categoryId: form.categoryId || null,
+      variants: variants.map((v) => ({
+        name: v.name,
+        additionalPrice: Number(v.additionalPrice || 0)
+      }))
+    };
     if (editing) updateMutation.mutate({ id: editing.id, data });
     else createMutation.mutate(data);
   };
@@ -115,6 +147,58 @@ export default function AdminProducts() {
                   <option value="">Tanpa kategori</option>
                   {categories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
                 </select>
+              </div>
+
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <label className="text-sm font-medium text-[var(--color-text-muted)]">Varian / Submenu (Opsional)</label>
+                  <button
+                    type="button"
+                    onClick={() => setVariants([...variants, { name: '', additionalPrice: '0' }])}
+                    className="btn btn-secondary btn-sm py-1 px-2 text-xs"
+                  >
+                    + Tambah Varian
+                  </button>
+                </div>
+                
+                {variants.length > 0 && (
+                  <div className="space-y-2 max-h-40 overflow-y-auto p-2 bg-[var(--color-surface)] rounded-lg border border-[var(--color-border)]">
+                    {variants.map((v, i) => (
+                      <div key={i} className="flex gap-2 items-center">
+                        <input
+                          placeholder="Nama (misal: 2 Keju)"
+                          className="input input-sm flex-1 text-xs"
+                          value={v.name}
+                          onChange={(e) => {
+                            const newVariants = [...variants];
+                            newVariants[i].name = e.target.value;
+                            setVariants(newVariants);
+                          }}
+                          required
+                        />
+                        <input
+                          type="number"
+                          placeholder="Harga Tambah"
+                          className="input input-sm w-24 text-xs"
+                          value={v.additionalPrice}
+                          onChange={(e) => {
+                            const newVariants = [...variants];
+                            newVariants[i].additionalPrice = e.target.value;
+                            setVariants(newVariants);
+                          }}
+                          required
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setVariants(variants.filter((_, idx) => idx !== i))}
+                          className="btn btn-ghost btn-icon btn-sm text-red-400 p-1"
+                        >
+                          <X size={14} />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
               <button type="submit" className="btn btn-primary w-full" disabled={createMutation.isPending || updateMutation.isPending}>
                 {(createMutation.isPending || updateMutation.isPending) ? <Loader2 size={18} className="animate-spin" /> : (editing ? 'Simpan' : 'Tambah')}

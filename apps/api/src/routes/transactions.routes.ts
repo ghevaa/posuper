@@ -63,6 +63,8 @@ export async function transactionRoutes(app: FastifyInstance) {
         transactionId: txId,
         productId: item.productId,
         productName: item.productName,
+        variantId: item.variantId || null,
+        variantName: item.variantName || null,
         qty: item.qty,
         price: String(item.price),
         subtotal: String(item.price * item.qty),

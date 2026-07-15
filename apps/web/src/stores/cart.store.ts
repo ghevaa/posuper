@@ -5,20 +5,26 @@
 import { create } from 'zustand';
 
 export interface CartItem {
+  cartItemId: string; // combination of productId + variantId
   productId: string;
   productName: string;
   price: number;
   qty: number;
   subtotal: number;
+  variantId?: string;
+  variantName?: string;
 }
 
 interface CartState {
   items: CartItem[];
-  addItem: (product: { id: string; name: string; price: number }) => void;
-  removeItem: (productId: string) => void;
-  updateQty: (productId: string, qty: number) => void;
-  incrementQty: (productId: string) => void;
-  decrementQty: (productId: string) => void;
+  addItem: (
+    product: { id: string; name: string; price: number },
+    variant?: { id: string; name: string; additionalPrice: number }
+  ) => void;
+  removeItem: (cartItemId: string) => void;
+  updateQty: (cartItemId: string, qty: number) => void;
+  incrementQty: (cartItemId: string) => void;
+  decrementQty: (cartItemId: string) => void;
   clearCart: () => void;
   getSubtotal: () => number;
   getItemCount: () => number;
@@ -27,13 +33,18 @@ interface CartState {
 export const useCartStore = create<CartState>((set, get) => ({
   items: [],
 
-  addItem: (product) => {
+  addItem: (product, variant) => {
     set((state) => {
-      const existing = state.items.find((i) => i.productId === product.id);
+      const finalPrice = product.price + (variant ? Number(variant.additionalPrice) : 0);
+      const variantId = variant?.id;
+      const variantName = variant?.name;
+      const cartItemId = product.id + (variantId ? `-${variantId}` : '');
+
+      const existing = state.items.find((i) => i.cartItemId === cartItemId);
       if (existing) {
         return {
           items: state.items.map((i) =>
-            i.productId === product.id
+            i.cartItemId === cartItemId
               ? { ...i, qty: i.qty + 1, subtotal: (i.qty + 1) * i.price }
               : i,
           ),
@@ -43,54 +54,57 @@ export const useCartStore = create<CartState>((set, get) => ({
         items: [
           ...state.items,
           {
+            cartItemId,
             productId: product.id,
-            productName: product.name,
-            price: product.price,
+            productName: variantName ? `${product.name} (${variantName})` : product.name,
+            price: finalPrice,
             qty: 1,
-            subtotal: product.price,
+            subtotal: finalPrice,
+            variantId,
+            variantName,
           },
         ],
       };
     });
   },
 
-  removeItem: (productId) => {
+  removeItem: (cartItemId) => {
     set((state) => ({
-      items: state.items.filter((i) => i.productId !== productId),
+      items: state.items.filter((i) => i.cartItemId !== cartItemId),
     }));
   },
 
-  updateQty: (productId, qty) => {
+  updateQty: (cartItemId, qty) => {
     if (qty <= 0) {
-      get().removeItem(productId);
+      get().removeItem(cartItemId);
       return;
     }
     set((state) => ({
       items: state.items.map((i) =>
-        i.productId === productId ? { ...i, qty, subtotal: qty * i.price } : i,
+        i.cartItemId === cartItemId ? { ...i, qty, subtotal: qty * i.price } : i,
       ),
     }));
   },
 
-  incrementQty: (productId) => {
+  incrementQty: (cartItemId) => {
     set((state) => ({
       items: state.items.map((i) =>
-        i.productId === productId
+        i.cartItemId === cartItemId
           ? { ...i, qty: i.qty + 1, subtotal: (i.qty + 1) * i.price }
           : i,
       ),
     }));
   },
 
-  decrementQty: (productId) => {
-    const item = get().items.find((i) => i.productId === productId);
+  decrementQty: (cartItemId) => {
+    const item = get().items.find((i) => i.cartItemId === cartItemId);
     if (item && item.qty <= 1) {
-      get().removeItem(productId);
+      get().removeItem(cartItemId);
       return;
     }
     set((state) => ({
       items: state.items.map((i) =>
-        i.productId === productId
+        i.cartItemId === cartItemId
           ? { ...i, qty: i.qty - 1, subtotal: (i.qty - 1) * i.price }
           : i,
       ),

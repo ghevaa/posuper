@@ -3,7 +3,7 @@
 // ============================================================
 
 import { useState, useRef, useEffect } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '../lib/api';
 import { useCartStore } from '../stores/cart.store';
 import { useAuthStore } from '../stores/auth.store';
@@ -14,6 +14,14 @@ import {
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 
+interface ProductVariantData {
+  id: string;
+  productId: string;
+  name: string;
+  additionalPrice: string;
+  createdAt: string;
+}
+
 interface ProductData {
   id: string;
   name: string;
@@ -23,6 +31,7 @@ interface ProductData {
   image: string | null;
   categoryId: string | null;
   isActive: boolean;
+  variants?: ProductVariantData[];
 }
 
 interface CategoryData {
@@ -33,6 +42,7 @@ interface CategoryData {
 }
 
 export default function POSPage() {
+  const qc = useQueryClient();
   const [search, setSearch] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const [showPayment, setShowPayment] = useState(false);
@@ -40,6 +50,7 @@ export default function POSPage() {
   const [paidAmount, setPaidAmount] = useState('');
   const [lastTransaction, setLastTransaction] = useState<any>(null);
   const [paying, setPaying] = useState(false);
+  const [variantSelectionProduct, setVariantSelectionProduct] = useState<ProductData | null>(null);
   const searchRef = useRef<HTMLInputElement>(null);
 
   const { items, addItem, removeItem, incrementQty, decrementQty, clearCart, getSubtotal } = useCartStore();
@@ -103,6 +114,8 @@ export default function POSPage() {
           productName: i.productName,
           qty: i.qty,
           price: i.price,
+          variantId: i.variantId || null,
+          variantName: i.variantName || null,
         })),
         paidAmount: paid,
         discount: 0,
@@ -114,10 +127,20 @@ export default function POSPage() {
       setShowReceipt(true);
       setPaidAmount('');
       toast.success('Transaksi berhasil!');
+      qc.invalidateQueries({ queryKey: ['products'] });
     } catch (err: any) {
       toast.error(err.message);
     } finally {
       setPaying(false);
+    }
+  };
+
+  const handleProductClick = (product: ProductData) => {
+    if (product.variants && product.variants.length > 0) {
+      setVariantSelectionProduct(product);
+    } else {
+      addItem({ id: product.id, name: product.name, price: Number(product.price) });
+      toast.success(`${product.name} +1`, { duration: 1000, icon: '🛒' });
     }
   };
 
@@ -169,10 +192,7 @@ export default function POSPage() {
               {filteredProducts.map((product) => (
                 <button
                   key={product.id}
-                  onClick={() => {
-                    addItem({ id: product.id, name: product.name, price: Number(product.price) });
-                    toast.success(`${product.name} +1`, { duration: 1000, icon: '🛒' });
-                  }}
+                  onClick={() => handleProductClick(product)}
                   className="glass-card p-4 text-left hover:border-[var(--color-primary-500)] transition-colors group"
                 >
                   <div className="w-full h-20 rounded-lg bg-[var(--color-surface)] mb-3 flex items-center justify-center text-3xl group-hover:scale-105 transition-transform">
@@ -210,22 +230,22 @@ export default function POSPage() {
             </div>
           ) : (
             items.map((item) => (
-              <div key={item.productId} className="flex items-center gap-3 p-3 rounded-lg bg-[var(--color-surface)] border border-[var(--color-border)]">
+              <div key={item.cartItemId} className="flex items-center gap-3 p-3 rounded-lg bg-[var(--color-surface)] border border-[var(--color-border)]">
                 <div className="flex-1 min-w-0">
                   <p className="font-medium text-sm truncate">{item.productName}</p>
                   <p className="text-[var(--color-primary-400)] text-xs">{formatCurrency(item.price)}</p>
                 </div>
                 <div className="flex items-center gap-1.5">
-                  <button onClick={() => decrementQty(item.productId)} className="btn btn-ghost btn-icon btn-sm">
+                  <button onClick={() => decrementQty(item.cartItemId)} className="btn btn-ghost btn-icon btn-sm">
                     <Minus size={14} />
                   </button>
                   <span className="w-8 text-center text-sm font-semibold">{item.qty}</span>
-                  <button onClick={() => incrementQty(item.productId)} className="btn btn-ghost btn-icon btn-sm">
+                  <button onClick={() => incrementQty(item.cartItemId)} className="btn btn-ghost btn-icon btn-sm">
                     <Plus size={14} />
                   </button>
                 </div>
                 <p className="font-semibold text-sm w-24 text-right">{formatCurrency(item.subtotal)}</p>
-                <button onClick={() => removeItem(item.productId)} className="text-[var(--color-text-dim)] hover:text-red-400">
+                <button onClick={() => removeItem(item.cartItemId)} className="text-[var(--color-text-dim)] hover:text-red-400">
                   <Trash2 size={14} />
                 </button>
               </div>
@@ -344,6 +364,71 @@ export default function POSPage() {
               <button className="btn btn-primary flex-1">
                 <Printer size={16} /> Cetak Struk
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Variant Selection Modal */}
+      {variantSelectionProduct && (
+        <div className="modal-overlay" onClick={() => setVariantSelectionProduct(null)}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-bold">Pilih Varian: {variantSelectionProduct.name}</h3>
+              <button onClick={() => setVariantSelectionProduct(null)} className="btn btn-ghost btn-icon">
+                <X size={20} />
+              </button>
+            </div>
+            
+            <div className="space-y-2">
+              {/* Normal price option */}
+              <button
+                onClick={() => {
+                  addItem({
+                    id: variantSelectionProduct.id,
+                    name: variantSelectionProduct.name,
+                    price: Number(variantSelectionProduct.price)
+                  });
+                  toast.success(`${variantSelectionProduct.name} +1`, { duration: 1000, icon: '🛒' });
+                  setVariantSelectionProduct(null);
+                }}
+                className="w-full flex items-center justify-between p-3 rounded-lg bg-[var(--color-surface)] border border-[var(--color-border)] hover:border-[var(--color-primary-500)] text-left"
+              >
+                <span>Normal</span>
+                <span className="font-semibold">{formatCurrency(Number(variantSelectionProduct.price))}</span>
+              </button>
+
+              {/* Variant options */}
+              {variantSelectionProduct.variants?.map((v) => (
+                <button
+                  key={v.id}
+                  onClick={() => {
+                    addItem(
+                      {
+                        id: variantSelectionProduct.id,
+                        name: variantSelectionProduct.name,
+                        price: Number(variantSelectionProduct.price)
+                      },
+                      {
+                        id: v.id,
+                        name: v.name,
+                        additionalPrice: Number(v.additionalPrice)
+                      }
+                    );
+                    toast.success(`${variantSelectionProduct.name} (${v.name}) +1`, { duration: 1000, icon: '🛒' });
+                    setVariantSelectionProduct(null);
+                  }}
+                  className="w-full flex items-center justify-between p-3 rounded-lg bg-[var(--color-surface)] border border-[var(--color-border)] hover:border-[var(--color-primary-500)] text-left"
+                >
+                  <span>{v.name}</span>
+                  <span className="font-semibold">
+                    {formatCurrency(Number(variantSelectionProduct.price) + Number(v.additionalPrice))} 
+                    <span className="text-xs text-[var(--color-text-dim)] ml-1">
+                      (+{formatCurrency(Number(v.additionalPrice))})
+                    </span>
+                  </span>
+                </button>
+              ))}
             </div>
           </div>
         </div>

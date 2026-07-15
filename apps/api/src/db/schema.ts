@@ -116,6 +116,22 @@ export const products = pgTable(
   ],
 );
 
+// --- Product Variants ---
+export const productVariants = pgTable(
+  'product_variants',
+  {
+    id: text('id').primaryKey(),
+    productId: text('product_id').notNull().references(() => products.id, { onDelete: 'cascade' }),
+    name: text('name').notNull(),
+    additionalPrice: numeric('additional_price', { precision: 12, scale: 2 }).notNull().default('0'),
+    createdAt: timestamp('created_at').defaultNow().notNull(),
+    updatedAt: timestamp('updated_at').defaultNow().$onUpdate(() => new Date()).notNull(),
+  },
+  (table) => [
+    index('product_variants_productId_idx').on(table.productId),
+  ],
+);
+
 // --- Customers ---
 export const customers = pgTable('customers', {
   id: text('id').primaryKey(),
@@ -158,6 +174,8 @@ export const transactionItems = pgTable(
     transactionId: text('transaction_id').notNull().references(() => transactions.id, { onDelete: 'cascade' }),
     productId: text('product_id').notNull().references(() => products.id),
     productName: text('product_name').notNull(),
+    variantId: text('variant_id'),
+    variantName: text('variant_name'),
     qty: integer('qty').notNull().default(1),
     price: numeric('price', { precision: 12, scale: 2 }).notNull(),
     subtotal: numeric('subtotal', { precision: 12, scale: 2 }).notNull(),

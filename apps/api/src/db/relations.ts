@@ -16,6 +16,7 @@ import {
   expenses,
   cashShifts,
   logs,
+  productVariants,
 } from './schema.js';
 
 // --- User Relations ---
@@ -50,10 +51,19 @@ export const categoryRelations = relations(categories, ({ many }) => ({
 }));
 
 // --- Product Relations ---
-export const productRelations = relations(products, ({ one }) => ({
+export const productRelations = relations(products, ({ one, many }) => ({
   category: one(categories, {
     fields: [products.categoryId],
     references: [categories.id],
+  }),
+  variants: many(productVariants),
+}));
+
+// --- Product Variants Relations ---
+export const productVariantsRelations = relations(productVariants, ({ one }) => ({
+  product: one(products, {
+    fields: [productVariants.productId],
+    references: [products.id],
   }),
 }));
 

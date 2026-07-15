@@ -4,7 +4,7 @@
 
 import type { FastifyInstance } from 'fastify';
 import { db } from '../db/index.js';
-import { products } from '../db/schema.js';
+import { products, productVariants } from '../db/schema.js';
 import { eq, ilike, or, desc } from 'drizzle-orm';
 import { nanoid } from 'nanoid';
 import { requireAuth, requireRole } from '../middleware/auth.middleware.js';
@@ -16,32 +16,42 @@ export async function productRoutes(app: FastifyInstance) {
     const { search, categoryId, page = '1', limit = '20' } = req.query as any;
     const offset = (Number(page) - 1) * Number(limit);
 
-    let query = db.select().from(products).orderBy(desc(products.createdAt));
-
-    const allProducts = await query.limit(Number(limit)).offset(offset);
+    // Fetch using findMany to include variants relationship
+    const allProducts = await db.query.products.findMany({
+      with: { variants: true },
+      limit: Number(limit),
+      offset: offset,
+      orderBy: [desc(products.createdAt)],
+    });
     return reply.send({ success: true, data: allProducts });
   });
 
   // Search by barcode
   app.get('/api/products/barcode/:barcode', { preHandler: [requireAuth] }, async (req, reply) => {
     const { barcode } = req.params as { barcode: string };
-    const product = await db.select().from(products).where(eq(products.barcode, barcode)).limit(1);
+    const product = await db.query.products.findFirst({
+      where: eq(products.barcode, barcode),
+      with: { variants: true },
+    });
 
-    if (!product.length) {
+    if (!product) {
       return reply.status(404).send({ success: false, error: 'Product not found' });
     }
-    return reply.send({ success: true, data: product[0] });
+    return reply.send({ success: true, data: product });
   });
 
   // Get single product
   app.get('/api/products/:id', { preHandler: [requireAuth] }, async (req, reply) => {
     const { id } = req.params as { id: string };
-    const product = await db.select().from(products).where(eq(products.id, id)).limit(1);
+    const product = await db.query.products.findFirst({
+      where: eq(products.id, id),
+      with: { variants: true },
+    });
 
-    if (!product.length) {
+    if (!product) {
       return reply.status(404).send({ success: false, error: 'Product not found' });
     }
-    return reply.send({ success: true, data: product[0] });
+    return reply.send({ success: true, data: product });
   });
 
   // Create product (admin+)
@@ -61,6 +71,18 @@ export async function productRoutes(app: FastifyInstance) {
       categoryId: body.categoryId || null,
       isActive: body.isActive ?? true,
     });
+
+    // Create variants if passed
+    if (Array.isArray(body.variants) && body.variants.length > 0) {
+      for (const v of body.variants) {
+        await db.insert(productVariants).values({
+          id: nanoid(),
+          productId: id,
+          name: v.name,
+          additionalPrice: String(v.additionalPrice || 0),
+        });
+      }
+    }
 
     await createAuditLog(req, 'product.created', `Product ${body.name} created`);
     return reply.status(201).send({ success: true, data: { id }, message: 'Product created' });
@@ -83,6 +105,24 @@ export async function productRoutes(app: FastifyInstance) {
     if (body.isActive !== undefined) updates.isActive = body.isActive;
 
     await db.update(products).set(updates).where(eq(products.id, id));
+
+    // Sync variants
+    if (body.variants !== undefined) {
+      // Delete old ones
+      await db.delete(productVariants).where(eq(productVariants.productId, id));
+      // Insert new ones
+      if (Array.isArray(body.variants) && body.variants.length > 0) {
+        for (const v of body.variants) {
+          await db.insert(productVariants).values({
+            id: nanoid(),
+            productId: id,
+            name: v.name,
+            additionalPrice: String(v.additionalPrice || 0),
+          });
+        }
+      }
+    }
+
     await createAuditLog(req, 'product.updated', `Product ${id} updated`);
     return reply.send({ success: true, message: 'Product updated' });
   });
