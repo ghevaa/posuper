@@ -7,7 +7,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '../lib/api';
 import { useCartStore } from '../stores/cart.store';
 import { useAuthStore } from '../stores/auth.store';
-import { formatCurrency } from '../lib/utils';
+import { formatCurrency, getProductImageUrl } from '../lib/utils';
 import {
   Search, Plus, Minus, Trash2, ShoppingCart, CreditCard,
   Loader2, X, Printer, CheckCircle2,
@@ -237,7 +237,7 @@ export default function POSPage() {
                 >
                   <div className="w-full h-20 rounded-lg bg-[var(--color-surface)] mb-3 flex items-center justify-center text-3xl group-hover:scale-105 transition-transform">
                     {product.image ? (
-                      <img src={product.image} alt={product.name} className="w-full h-full object-cover rounded-lg" />
+                      <img src={getProductImageUrl(product.image)} alt={product.name} className="w-full h-full object-cover rounded-lg" />
                     ) : '📦'}
                   </div>
                   <p className="font-medium text-sm truncate">{product.name}</p>

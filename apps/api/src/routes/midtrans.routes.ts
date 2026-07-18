@@ -12,9 +12,9 @@ import { requireAuth } from '../middleware/auth.middleware.js';
 import midtransClient from 'midtrans-client';
 
 const snap = new midtransClient.Snap({
-  isProduction: false,
-  serverKey: 'SB-Mid-server-3ABFAqq0bFUSzCNK7cQVWxl-',
-  clientKey: 'SB-Mid-client-F__YPZ5Ty_h_KVOm',
+  isProduction: process.env.MIDTRANS_IS_PRODUCTION === 'true',
+  serverKey: process.env.MIDTRANS_SERVER_KEY || 'SB-Mid-server-3ABFAqq0bFUSzCNK7cQVWxl-',
+  clientKey: process.env.MIDTRANS_CLIENT_KEY || 'SB-Mid-client-F__YPZ5Ty_h_KVOm',
 });
 
 export async function midtransRoutes(app: FastifyInstance) {
@@ -37,7 +37,6 @@ export async function midtransRoutes(app: FastifyInstance) {
         price: item.price,
         quantity: item.qty,
       })),
-      enabled_payments: ['other_qris'],
     };
 
     try {

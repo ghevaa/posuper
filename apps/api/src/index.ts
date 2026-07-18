@@ -21,7 +21,15 @@ import { midtransRoutes } from './routes/midtrans.routes.js';
 import { stockOpnameRoutes } from './routes/stock-opname.routes.js';
 import { socketPlugin } from './plugins/socket.js';
 import { db } from './db/index.js';
+import multipart from '@fastify/multipart';
+import fastifyStatic from '@fastify/static';
+import path from 'path';
+import fs from 'fs';
+import { fileURLToPath } from 'url';
 import * as schema from './db/schema.js';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 const app = Fastify({
   logger: {
@@ -89,6 +97,26 @@ async function start() {
     ],
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
     credentials: true,
+  });
+
+  // Ensure uploads directory exists
+  const uploadsDir = path.join(__dirname, '../uploads');
+  if (!fs.existsSync(uploadsDir)) {
+    fs.mkdirSync(uploadsDir, { recursive: true });
+  }
+
+  // Register Multipart for uploads
+  await app.register(multipart, {
+    limits: {
+      fileSize: 10 * 1024 * 1024, // 10MB limit
+    },
+  });
+
+  // Register Static to serve uploaded files at /api/uploads/*
+  await app.register(fastifyStatic, {
+    root: uploadsDir,
+    prefix: '/api/uploads/',
+    decorateReply: false,
   });
 
   // Health check

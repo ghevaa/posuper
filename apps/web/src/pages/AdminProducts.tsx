@@ -5,7 +5,7 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '../lib/api';
-import { formatCurrency } from '../lib/utils';
+import { formatCurrency, getProductImageUrl } from '../lib/utils';
 import { Plus, Pencil, Trash2, X, Loader2 } from 'lucide-react';
 import toast from 'react-hot-toast';
 
@@ -28,6 +28,50 @@ export default function AdminProducts() {
   const [editing, setEditing] = useState<Product | null>(null);
   const [form, setForm] = useState({ name: '', price: '', cost: '', stock: '', barcode: '', sku: '', categoryId: '', image: '' });
   const [variants, setVariants] = useState<ProductVariant[]>([]);
+  const [uploading, setUploading] = useState(false);
+
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (file.size > 5 * 1024 * 1024) {
+      toast.error('Berkas terlalu besar! Maksimal 5MB.');
+      return;
+    }
+
+    const formData = new FormData();
+    formData.append('file', file);
+
+    setUploading(true);
+    const toastId = toast.loading('Mengunggah gambar...');
+    try {
+      const token = localStorage.getItem('pos_yoga_session_token');
+      const IS_TAURI = !!(window as any).__TAURI_INTERNALS__;
+      const BASE_URL = IS_TAURI ? 'http://72.61.214.92:8080' : '';
+
+      const res = await fetch(`${BASE_URL}/api/products/upload`, {
+        method: 'POST',
+        headers: token ? { 'Authorization': `Bearer ${token}` } : {},
+        body: formData,
+      });
+
+      if (!res.ok) {
+        throw new Error('Gagal mengunggah gambar');
+      }
+
+      const result = await res.json();
+      if (result.success && result.data?.url) {
+        setForm({ ...form, image: result.data.url });
+        toast.success('Gambar berhasil diunggah!', { id: toastId });
+      } else {
+        throw new Error(result.error || 'Respon gagal');
+      }
+    } catch (err: any) {
+      toast.error(err.message || 'Gagal mengunggah gambar', { id: toastId });
+    } finally {
+      setUploading(false);
+    }
+  };
 
   const qc = useQueryClient();
   const { data: productsRes, isLoading } = useQuery({ queryKey: ['products'], queryFn: () => api.get<{ data: Product[] }>('/products') });
@@ -111,7 +155,7 @@ export default function AdminProducts() {
                     <div className="flex items-center gap-3">
                       <div className="w-8 h-8 rounded bg-[var(--color-surface)] flex items-center justify-center text-base overflow-hidden border border-[var(--color-border)] shrink-0">
                         {p.image ? (
-                          <img src={p.image} alt={p.name} className="w-full h-full object-cover" />
+                          <img src={getProductImageUrl(p.image)} alt={p.name} className="w-full h-full object-cover" />
                         ) : '📦'}
                       </div>
                       <span>{p.name}</span>
@@ -159,13 +203,25 @@ export default function AdminProducts() {
                 </select>
               </div>
               <div>
-                <label className="text-sm font-medium text-[var(--color-text-muted)] mb-1 block">URL Gambar / Thumbnail (Opsional)</label>
-                <input
-                  placeholder="https://example.com/gambar.jpg"
-                  className="input"
-                  value={form.image}
-                  onChange={(e) => setForm({ ...form, image: e.target.value })}
-                />
+                <label className="text-sm font-medium text-[var(--color-text-muted)] mb-1 block">Gambar Produk (URL atau Unggah Lokal)</label>
+                <div className="flex gap-2">
+                  <input
+                    placeholder="https://example.com/gambar.jpg atau unggah berkas..."
+                    className="input flex-grow text-xs"
+                    value={form.image}
+                    onChange={(e) => setForm({ ...form, image: e.target.value })}
+                  />
+                  <label className="btn btn-secondary cursor-pointer flex items-center justify-center shrink-0 text-xs py-1 px-3">
+                    Unggah
+                    <input
+                      type="file"
+                      accept="image/*"
+                      className="hidden"
+                      onChange={handleImageUpload}
+                      disabled={uploading}
+                    />
+                  </label>
+                </div>
               </div>
 
               <div>

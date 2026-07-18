@@ -9,6 +9,14 @@ import { eq, ilike, or, desc } from 'drizzle-orm';
 import { nanoid } from 'nanoid';
 import { requireAuth, requireRole } from '../middleware/auth.middleware.js';
 import { createAuditLog } from '../middleware/logger.middleware.js';
+import fs from 'fs';
+import path from 'path';
+import { pipeline } from 'stream/promises';
+import { fileURLToPath } from 'url';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const UPLOADS_DIR = path.join(__dirname, '../../uploads');
 
 export async function productRoutes(app: FastifyInstance) {
   // List products (all authenticated)
@@ -133,5 +141,32 @@ export async function productRoutes(app: FastifyInstance) {
     await db.update(products).set({ isActive: false }).where(eq(products.id, id));
     await createAuditLog(req, 'product.deleted', `Product ${id} soft-deleted`);
     return reply.send({ success: true, message: 'Product deleted' });
+  });
+
+  // Upload product image (authenticated)
+  app.post('/api/products/upload', { preHandler: [requireAuth] }, async (req, reply) => {
+    const fileData = await req.file();
+    if (!fileData) {
+      return reply.status(400).send({ success: false, error: 'No file uploaded' });
+    }
+
+    const allowedTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
+    if (!allowedTypes.includes(fileData.mimetype)) {
+      return reply.status(400).send({ success: false, error: 'Only images are allowed (jpg, png, gif, webp)' });
+    }
+
+    const ext = path.extname(fileData.filename) || '.jpg';
+    const filename = `${nanoid()}${ext}`;
+    const filepath = path.join(UPLOADS_DIR, filename);
+
+    // Save file using streams pipeline
+    await pipeline(fileData.file, fs.createWriteStream(filepath));
+
+    return reply.send({
+      success: true,
+      data: {
+        url: `/api/uploads/${filename}`,
+      },
+    });
   });
 }
