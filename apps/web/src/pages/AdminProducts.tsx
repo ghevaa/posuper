@@ -26,7 +26,7 @@ interface Category { id: string; name: string; }
 export default function AdminProducts() {
   const [showForm, setShowForm] = useState(false);
   const [editing, setEditing] = useState<Product | null>(null);
-  const [form, setForm] = useState({ name: '', price: '', cost: '', stock: '', barcode: '', sku: '', categoryId: '' });
+  const [form, setForm] = useState({ name: '', price: '', cost: '', stock: '', barcode: '', sku: '', categoryId: '', image: '' });
   const [variants, setVariants] = useState<ProductVariant[]>([]);
 
   const qc = useQueryClient();
@@ -53,13 +53,13 @@ export default function AdminProducts() {
 
   const openCreate = () => {
     setEditing(null);
-    setForm({ name: '', price: '', cost: '', stock: '', barcode: '', sku: '', categoryId: '' });
+    setForm({ name: '', price: '', cost: '', stock: '', barcode: '', sku: '', categoryId: '', image: '' });
     setVariants([]);
     setShowForm(true);
   };
   const openEdit = (p: Product) => {
     setEditing(p);
-    setForm({ name: p.name, price: p.price, cost: p.cost, stock: String(p.stock), barcode: p.barcode || '', sku: p.sku || '', categoryId: p.categoryId || '' });
+    setForm({ name: p.name, price: p.price, cost: p.cost, stock: String(p.stock), barcode: p.barcode || '', sku: p.sku || '', categoryId: p.categoryId || '', image: p.image || '' });
     setVariants(p.variants ? p.variants.map((v) => ({ id: v.id, name: v.name, additionalPrice: String(Number(v.additionalPrice)) })) : []);
     setShowForm(true);
   };
@@ -77,6 +77,7 @@ export default function AdminProducts() {
       cost: Number(form.cost),
       stock: Number(form.stock),
       categoryId: form.categoryId || null,
+      image: form.image || null,
       variants: variants.map((v) => ({
         name: v.name,
         additionalPrice: Number(v.additionalPrice || 0)
@@ -106,7 +107,16 @@ export default function AdminProducts() {
             ) : (
               products.map((p) => (
                 <tr key={p.id}>
-                  <td className="font-medium">{p.name}</td>
+                  <td className="font-medium">
+                    <div className="flex items-center gap-3">
+                      <div className="w-8 h-8 rounded bg-[var(--color-surface)] flex items-center justify-center text-base overflow-hidden border border-[var(--color-border)] shrink-0">
+                        {p.image ? (
+                          <img src={p.image} alt={p.name} className="w-full h-full object-cover" />
+                        ) : '📦'}
+                      </div>
+                      <span>{p.name}</span>
+                    </div>
+                  </td>
                   <td className="text-[var(--color-text-muted)]">{p.barcode || '-'}</td>
                   <td>{formatCurrency(Number(p.price))}</td>
                   <td className="text-[var(--color-text-dim)]">{formatCurrency(Number(p.cost))}</td>
@@ -148,6 +158,15 @@ export default function AdminProducts() {
                   {categories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
                 </select>
               </div>
+              <div>
+                <label className="text-sm font-medium text-[var(--color-text-muted)] mb-1 block">URL Gambar / Thumbnail (Opsional)</label>
+                <input
+                  placeholder="https://example.com/gambar.jpg"
+                  className="input"
+                  value={form.image}
+                  onChange={(e) => setForm({ ...form, image: e.target.value })}
+                />
+              </div>
 
               <div>
                 <div className="flex items-center justify-between mb-2">
@@ -164,10 +183,11 @@ export default function AdminProducts() {
                 {variants.length > 0 && (
                   <div className="space-y-2 max-h-40 overflow-y-auto p-2 bg-[var(--color-surface)] rounded-lg border border-[var(--color-border)]">
                     {variants.map((v, i) => (
-                      <div key={i} className="flex gap-2 items-center">
+                      <div key={i} className="flex gap-2 items-center w-full">
                         <input
                           placeholder="Nama (misal: 2 Keju)"
-                          className="input input-sm flex-1 text-xs"
+                          className="input input-sm text-xs"
+                          style={{ flex: '1 1 0%', minWidth: 0, width: 'auto' }}
                           value={v.name}
                           onChange={(e) => {
                             const newVariants = [...variants];
@@ -179,7 +199,8 @@ export default function AdminProducts() {
                         <input
                           type="number"
                           placeholder="Harga Tambah"
-                          className="input input-sm w-24 text-xs"
+                          className="input input-sm text-xs"
+                          style={{ width: '120px', flex: '0 0 auto' }}
                           value={v.additionalPrice}
                           onChange={(e) => {
                             const newVariants = [...variants];
