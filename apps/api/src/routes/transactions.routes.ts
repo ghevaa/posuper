@@ -10,6 +10,14 @@ import { nanoid } from 'nanoid';
 import { INVOICE_PREFIX } from '@pos-yoga/config';
 import { requireAuth, requireRole } from '../middleware/auth.middleware.js';
 import { createAuditLog } from '../middleware/logger.middleware.js';
+// @ts-ignore
+import midtransClient from 'midtrans-client';
+
+const snap = new midtransClient.Snap({
+  isProduction: false,
+  serverKey: 'SB-Mid-server-3ABFAqq0bFUSzCNK7cQVWxl-',
+  clientKey: 'SB-Mid-client-F__YPZ5Ty_h_KVOm',
+});
 
 function generateInvoiceNo(): string {
   const now = new Date();
@@ -25,6 +33,7 @@ export async function transactionRoutes(app: FastifyInstance) {
     const currentUser = (req as any).user;
     const txId = nanoid();
     const invoiceNo = generateInvoiceNo();
+    const paymentMethod = body.paymentMethod || 'cash';
 
     // Calculate totals
     let subtotal = 0;
@@ -40,6 +49,9 @@ export async function transactionRoutes(app: FastifyInstance) {
     const paidAmount = Number(body.paidAmount || 0);
     const changeAmount = paidAmount - total;
 
+    // Determine status based on payment method
+    const status = paymentMethod === 'qris' ? 'pending' : 'completed';
+
     // Insert transaction
     await db.insert(transactions).values({
       id: txId,
@@ -52,11 +64,12 @@ export async function transactionRoutes(app: FastifyInstance) {
       total: String(total),
       paidAmount: String(paidAmount),
       changeAmount: String(changeAmount > 0 ? changeAmount : 0),
-      status: 'completed',
+      status,
       note: body.note || null,
+      paymentMethod,
     });
 
-    // Insert items + deduct stock
+    // Insert items
     for (const item of items) {
       await db.insert(transactionItems).values({
         id: nanoid(),
@@ -76,15 +89,62 @@ export async function transactionRoutes(app: FastifyInstance) {
         .where(eq(products.id, item.productId));
     }
 
-    // Insert payment
-    await db.insert(payments).values({
-      id: nanoid(),
-      transactionId: txId,
-      method: 'cash',
-      amount: String(paidAmount),
-    });
+    // Insert payment record only for cash
+    if (paymentMethod === 'cash') {
+      await db.insert(payments).values({
+        id: nanoid(),
+        transactionId: txId,
+        method: 'cash',
+        amount: String(paidAmount),
+      });
+    }
 
-    await createAuditLog(req, 'transaction.created', `Invoice ${invoiceNo}, Total: ${total}`);
+    // For QRIS: generate Midtrans snap token
+    let snapToken: string | null = null;
+    let snapRedirectUrl: string | null = null;
+
+    if (paymentMethod === 'qris') {
+      try {
+        const midtransOrderId = `QRIS-${txId}`;
+        const parameter = {
+          transaction_details: {
+            order_id: midtransOrderId,
+            gross_amount: Math.round(total),
+          },
+          item_details: items.map((item: any) => ({
+            id: item.productId,
+            name: item.productName,
+            price: Math.round(item.price),
+            quantity: item.qty,
+          })),
+          enabled_payments: ['other_qris'],
+        };
+
+        const midtransTransaction = await snap.createTransaction(parameter);
+        snapToken = midtransTransaction.token;
+        snapRedirectUrl = midtransTransaction.redirect_url;
+
+        // Save snap token and order ID to transaction
+        await db.update(transactions)
+          .set({
+            midtransOrderId,
+            midtransSnapToken: snapToken,
+          })
+          .where(eq(transactions.id, txId));
+      } catch (err: any) {
+        console.error('Midtrans snap token error:', err);
+        // Rollback: delete the transaction since payment setup failed
+        await db.delete(transactionItems).where(eq(transactionItems.transactionId, txId));
+        await db.delete(transactions).where(eq(transactions.id, txId));
+        return reply.status(500).send({
+          success: false,
+          error: 'Failed to create QRIS payment',
+          detail: err.message,
+        });
+      }
+    }
+
+    await createAuditLog(req, 'transaction.created', `Invoice ${invoiceNo}, Total: ${total}, Method: ${paymentMethod}`);
 
     // Emit socket event
     const io = (app as any).io;
@@ -92,10 +152,23 @@ export async function transactionRoutes(app: FastifyInstance) {
       io.emit('order:new', { id: txId, invoiceNo, total, items });
     }
 
+    const responseData: any = {
+      id: txId,
+      invoiceNo,
+      total,
+      changeAmount: changeAmount > 0 ? changeAmount : 0,
+      paymentMethod,
+    };
+
+    if (paymentMethod === 'qris' && snapToken) {
+      responseData.snapToken = snapToken;
+      responseData.snapRedirectUrl = snapRedirectUrl;
+    }
+
     return reply.status(201).send({
       success: true,
-      data: { id: txId, invoiceNo, total, changeAmount: changeAmount > 0 ? changeAmount : 0 },
-      message: 'Transaction completed',
+      data: responseData,
+      message: paymentMethod === 'qris' ? 'Transaction created, awaiting QRIS payment' : 'Transaction completed',
     });
   });
 

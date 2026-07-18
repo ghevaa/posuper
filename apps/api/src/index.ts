@@ -17,6 +17,8 @@ import { shiftRoutes } from './routes/shifts.routes.js';
 import { settingsRoutes } from './routes/settings.routes.js';
 import { reportRoutes } from './routes/reports.routes.js';
 import { backupRoutes } from './routes/backup.routes.js';
+import { midtransRoutes } from './routes/midtrans.routes.js';
+import { stockOpnameRoutes } from './routes/stock-opname.routes.js';
 import { socketPlugin } from './plugins/socket.js';
 import { db } from './db/index.js';
 import * as schema from './db/schema.js';
@@ -108,6 +110,8 @@ async function start() {
   await app.register(settingsRoutes);
   await app.register(reportRoutes);
   await app.register(backupRoutes);
+  await app.register(stockOpnameRoutes);
+  await app.register(midtransRoutes);
 
   // Socket.IO
   await app.register(socketPlugin);

@@ -7,7 +7,7 @@ import { useAuthStore } from '../stores/auth.store';
 import {
   LayoutDashboard, ShoppingCart, Package, Tag, Receipt,
   BarChart3, Users, Settings, DollarSign, Clock,
-  Shield, Database, FileText, LogOut, Menu, X, UserCircle,
+  Shield, Database, FileText, LogOut, Menu, X, UserCircle, ClipboardList,
 } from 'lucide-react';
 import { useState } from 'react';
 
@@ -23,6 +23,7 @@ const adminLinks = [
   { to: '/admin/transactions', icon: Receipt, label: 'Transaksi' },
   { to: '/admin/reports', icon: BarChart3, label: 'Laporan' },
   { to: '/admin/expenses', icon: DollarSign, label: 'Pengeluaran' },
+  { to: '/admin/stock-opname', icon: ClipboardList, label: 'Stok Opname' },
   { to: '/admin/users', icon: Users, label: 'Pengguna' },
   { to: '/admin/customers', icon: UserCircle, label: 'Pelanggan' },
 ];
@@ -109,7 +110,7 @@ export default function DashboardLayout() {
               <p className="text-sm font-medium truncate">{user?.name}</p>
               <p className="text-[11px] text-[var(--color-text-dim)] truncate flex items-center justify-between">
                 <span>{user?.email}</span>
-                <span className="text-[9px] bg-[var(--color-surface-lighter)] text-[var(--color-text-dim)] px-1 rounded font-mono">v0.1.2</span>
+                <span className="text-[9px] bg-[var(--color-surface-lighter)] text-[var(--color-text-dim)] px-1 rounded font-mono">v0.1.3</span>
               </p>
             </div>
           </div>

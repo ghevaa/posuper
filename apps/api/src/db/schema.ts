@@ -16,7 +16,7 @@ import {
 // --- Enums ---
 export const roleEnum = pgEnum('role', ['developer', 'admin', 'cashier']);
 export const transactionStatusEnum = pgEnum('transaction_status', ['completed', 'voided', 'pending']);
-export const paymentMethodEnum = pgEnum('payment_method', ['cash']);
+export const paymentMethodEnum = pgEnum('payment_method', ['cash', 'qris']);
 export const printerTypeEnum = pgEnum('printer_type', ['receipt', 'kitchen']);
 export const printerConnectionEnum = pgEnum('printer_connection', ['usb', 'network', 'bluetooth']);
 export const shiftStatusEnum = pgEnum('shift_status', ['open', 'closed']);
@@ -158,6 +158,9 @@ export const transactions = pgTable(
     changeAmount: numeric('change_amount', { precision: 12, scale: 2 }).notNull().default('0'),
     status: transactionStatusEnum('status').notNull().default('completed'),
     note: text('note'),
+    paymentMethod: paymentMethodEnum('payment_method').notNull().default('cash'),
+    midtransOrderId: text('midtrans_order_id'),
+    midtransSnapToken: text('midtrans_snap_token'),
     createdAt: timestamp('created_at').defaultNow().notNull(),
   },
   (table) => [
@@ -257,4 +260,37 @@ export const logs = pgTable(
     createdAt: timestamp('created_at').defaultNow().notNull(),
   },
   (table) => [index('logs_createdAt_idx').on(table.createdAt)],
+);
+
+// --- Stock Opname Sessions ---
+export const stockOpnameSessions = pgTable(
+  'stock_opname_sessions',
+  {
+    id: text('id').primaryKey(),
+    name: text('name').notNull(),
+    date: timestamp('date').notNull(),
+    userId: text('user_id').notNull().references(() => user.id),
+    notes: text('notes'),
+    createdAt: timestamp('created_at').defaultNow().notNull(),
+  },
+  (table) => [index('stock_opname_sessions_date_idx').on(table.date)],
+);
+
+// --- Stock Opname Items ---
+export const stockOpnameItems = pgTable(
+  'stock_opname_items',
+  {
+    id: text('id').primaryKey(),
+    sessionId: text('session_id').notNull().references(() => stockOpnameSessions.id, { onDelete: 'cascade' }),
+    productId: text('product_id').references(() => products.id, { onDelete: 'set null' }),
+    productName: text('product_name').notNull(),
+    unit: text('unit').notNull().default('Pcs'),
+    stockStart: integer('stock_start').notNull().default(0),
+    stockIn: integer('stock_in').notNull().default(0),
+    stockReal: integer('stock_real').notNull().default(0),
+    usage: integer('usage').notNull().default(0),
+    waste: integer('waste').notNull().default(0),
+    notes: text('notes'),
+  },
+  (table) => [index('stock_opname_items_sessionId_idx').on(table.sessionId)],
 );

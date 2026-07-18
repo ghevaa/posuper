@@ -17,6 +17,8 @@ import {
   cashShifts,
   logs,
   productVariants,
+  stockOpnameSessions,
+  stockOpnameItems,
 } from './schema.js';
 
 // --- User Relations ---
@@ -27,6 +29,7 @@ export const userRelations = relations(user, ({ many }) => ({
   expenses: many(expenses),
   cashShifts: many(cashShifts),
   logs: many(logs),
+  stockOpnameSessions: many(stockOpnameSessions),
 }));
 
 // --- Session Relations ---
@@ -128,4 +131,16 @@ export const logRelations = relations(logs, ({ one }) => ({
     fields: [logs.userId],
     references: [user.id],
   }),
+}));
+
+// --- Stock Opname Session Relations ---
+export const stockOpnameSessionRelations = relations(stockOpnameSessions, ({ one, many }) => ({
+  user: one(user, { fields: [stockOpnameSessions.userId], references: [user.id] }),
+  items: many(stockOpnameItems),
+}));
+
+// --- Stock Opname Item Relations ---
+export const stockOpnameItemRelations = relations(stockOpnameItems, ({ one }) => ({
+  session: one(stockOpnameSessions, { fields: [stockOpnameItems.sessionId], references: [stockOpnameSessions.id] }),
+  product: one(products, { fields: [stockOpnameItems.productId], references: [products.id] }),
 }));

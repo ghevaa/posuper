@@ -14,6 +14,7 @@ import AdminProducts from './pages/AdminProducts';
 import AdminCategories from './pages/AdminCategories';
 import AdminTransactions from './pages/AdminTransactions';
 import AdminExpenses from './pages/AdminExpenses';
+import AdminStockOpname from './pages/AdminStockOpname';
 import DevSettings from './pages/DevSettings';
 import { Toaster } from 'react-hot-toast';
 import UpdateChecker from './components/UpdateChecker';
@@ -112,6 +113,14 @@ export default function App() {
             element={
               <ProtectedRoute allowedRoles={['admin', 'developer']}>
                 <AdminExpenses />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="admin/stock-opname"
+            element={
+              <ProtectedRoute allowedRoles={['admin', 'developer']}>
+                <AdminStockOpname />
               </ProtectedRoute>
             }
           />

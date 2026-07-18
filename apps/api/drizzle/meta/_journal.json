@@ -15,6 +15,13 @@
       "when": 1784127197093,
       "tag": "0001_tired_rachel_grey",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1784358253907,
+      "tag": "0002_chemical_swarm",
+      "breakpoints": true
     }
   ]
 }

@@ -51,6 +51,7 @@ export default function POSPage() {
   const [lastTransaction, setLastTransaction] = useState<any>(null);
   const [paying, setPaying] = useState(false);
   const [variantSelectionProduct, setVariantSelectionProduct] = useState<ProductData | null>(null);
+  const [paymentMethod, setPaymentMethod] = useState<'cash' | 'qris'>('cash');
   const searchRef = useRef<HTMLInputElement>(null);
 
   const { items, addItem, removeItem, incrementQty, decrementQty, clearCart, getSubtotal } = useCartStore();
@@ -101,8 +102,9 @@ export default function POSPage() {
   }, [search, products, addItem]);
 
   const handlePay = async () => {
+    const isQris = paymentMethod === 'qris';
     const paid = Number(paidAmount);
-    if (paid < subtotal) {
+    if (!isQris && paid < subtotal) {
       toast.error('Jumlah bayar kurang!');
       return;
     }
@@ -117,17 +119,55 @@ export default function POSPage() {
           variantId: i.variantId || null,
           variantName: i.variantName || null,
         })),
-        paidAmount: paid,
+        paidAmount: isQris ? subtotal : paid,
         discount: 0,
         taxRate: 0,
+        paymentMethod,
       });
-      setLastTransaction(res.data);
-      clearCart();
-      setShowPayment(false);
-      setShowReceipt(true);
-      setPaidAmount('');
-      toast.success('Transaksi berhasil!');
-      qc.invalidateQueries({ queryKey: ['products'] });
+
+      if (isQris && res.data.midtransSnapToken) {
+        if ((window as any).snap) {
+          (window as any).snap.pay(res.data.midtransSnapToken, {
+            onSuccess: (result: any) => {
+              console.log('Midtrans Snap Success:', result);
+              setLastTransaction(res.data);
+              clearCart();
+              setShowPayment(false);
+              setShowReceipt(true);
+              setPaidAmount('');
+              toast.success('Pembayaran QRIS Berhasil!');
+              qc.invalidateQueries({ queryKey: ['products'] });
+            },
+            onPending: (result: any) => {
+              console.log('Midtrans Snap Pending:', result);
+              setLastTransaction(res.data);
+              clearCart();
+              setShowPayment(false);
+              setPaidAmount('');
+              toast.success('Menunggu Pembayaran QRIS');
+              qc.invalidateQueries({ queryKey: ['products'] });
+            },
+            onError: (result: any) => {
+              console.error('Midtrans Snap Error:', result);
+              toast.error('Pembayaran QRIS Gagal!');
+            },
+            onClose: () => {
+              console.log('Midtrans Snap Closed');
+              toast.error('Pemberitahuan: QRIS ditutup. Hubungi admin jika sudah bayar.');
+            }
+          });
+        } else {
+          toast.error('Gagal memuat Snap JS Midtrans!');
+        }
+      } else {
+        setLastTransaction(res.data);
+        clearCart();
+        setShowPayment(false);
+        setShowReceipt(true);
+        setPaidAmount('');
+        toast.success('Transaksi berhasil!');
+        qc.invalidateQueries({ queryKey: ['products'] });
+      }
     } catch (err: any) {
       toast.error(err.message);
     } finally {
@@ -263,6 +303,7 @@ export default function POSPage() {
             onClick={() => {
               if (items.length === 0) { toast.error('Keranjang kosong!'); return; }
               setShowPayment(true);
+              setPaymentMethod('cash');
               setPaidAmount(String(subtotal));
             }}
             className="btn btn-success w-full btn-lg"
@@ -279,52 +320,79 @@ export default function POSPage() {
         <div className="modal-overlay" onClick={() => setShowPayment(false)}>
           <div className="modal-content" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between mb-6">
-              <h3 className="text-lg font-bold">Pembayaran Cash</h3>
+              <h3 className="text-lg font-bold">Pilih Metode Pembayaran</h3>
               <button onClick={() => setShowPayment(false)} className="btn btn-ghost btn-icon">
                 <X size={20} />
               </button>
             </div>
 
+            {/* Pilihan Metode */}
+            <div className="flex gap-2 mb-6">
+              <button
+                type="button"
+                onClick={() => setPaymentMethod('cash')}
+                className={`btn flex-grow ${paymentMethod === 'cash' ? 'btn-primary' : 'btn-secondary'}`}
+              >
+                Tunai (Cash)
+              </button>
+              <button
+                type="button"
+                onClick={() => setPaymentMethod('qris')}
+                className={`btn flex-grow ${paymentMethod === 'qris' ? 'btn-primary' : 'btn-secondary'}`}
+              >
+                QRIS (Midtrans)
+              </button>
+            </div>
+
             <div className="text-center mb-6">
-              <p className="text-sm text-[var(--color-text-muted)]">Total</p>
+              <p className="text-sm text-[var(--color-text-muted)]">Total Tagihan</p>
               <p className="text-3xl font-bold gradient-text">{formatCurrency(subtotal)}</p>
             </div>
 
-            <div>
-              <label className="text-sm font-medium text-[var(--color-text-muted)] mb-2 block">Jumlah Bayar</label>
-              <input
-                type="number"
-                value={paidAmount}
-                onChange={(e) => setPaidAmount(e.target.value)}
-                className="input text-center text-2xl font-bold"
-                autoFocus
-              />
-            </div>
-
-            <div className="grid grid-cols-3 gap-2 mt-4">
-              {quickAmounts.map((amount) => (
-                <button
-                  key={amount}
-                  onClick={() => setPaidAmount(String(amount))}
-                  className="btn btn-secondary btn-sm"
-                >
-                  {formatCurrency(amount)}
-                </button>
-              ))}
-            </div>
-
-            {Number(paidAmount) >= subtotal && (
-              <div className="mt-4 p-3 rounded-lg bg-green-500/10 text-center">
-                <p className="text-sm text-[var(--color-text-muted)]">Kembalian</p>
-                <p className="text-2xl font-bold text-green-400">
-                  {formatCurrency(Number(paidAmount) - subtotal)}
-                </p>
+            {paymentMethod === 'qris' ? (
+              <div className="text-center p-6 border border-dashed border-[var(--color-border)] rounded-lg bg-[var(--color-surface)]">
+                <p className="text-sm font-semibold text-orange-400 mb-2">Metode QRIS Terpilih</p>
+                <p className="text-xs text-[var(--color-text-dim)]">Setelah klik konfirmasi, pop-up pembayaran QRIS Midtrans akan muncul untuk dipindai oleh pelanggan.</p>
               </div>
+            ) : (
+              <>
+                <div>
+                  <label className="text-sm font-medium text-[var(--color-text-muted)] mb-2 block">Jumlah Bayar</label>
+                  <input
+                    type="number"
+                    value={paidAmount}
+                    onChange={(e) => setPaidAmount(e.target.value)}
+                    className="input text-center text-2xl font-bold"
+                    autoFocus
+                  />
+                </div>
+
+                <div className="grid grid-cols-3 gap-2 mt-4">
+                  {quickAmounts.map((amount) => (
+                    <button
+                      key={amount}
+                      onClick={() => setPaidAmount(String(amount))}
+                      className="btn btn-secondary btn-sm"
+                    >
+                      {formatCurrency(amount)}
+                    </button>
+                  ))}
+                </div>
+
+                {Number(paidAmount) >= subtotal && (
+                  <div className="mt-4 p-3 rounded-lg bg-green-500/10 text-center">
+                    <p className="text-sm text-[var(--color-text-muted)]">Kembalian</p>
+                    <p className="text-2xl font-bold text-green-400">
+                      {formatCurrency(Number(paidAmount) - subtotal)}
+                    </p>
+                  </div>
+                )}
+              </>
             )}
 
             <button
               onClick={handlePay}
-              disabled={paying || Number(paidAmount) < subtotal}
+              disabled={paying || (paymentMethod === 'cash' && Number(paidAmount) < subtotal)}
               className="btn btn-success w-full btn-lg mt-6"
             >
               {paying ? <Loader2 size={20} className="animate-spin" /> : (
