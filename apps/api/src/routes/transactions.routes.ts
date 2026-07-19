@@ -160,7 +160,7 @@ export async function transactionRoutes(app: FastifyInstance) {
     };
 
     if (paymentMethod === 'qris' && snapToken) {
-      responseData.snapToken = snapToken;
+      responseData.midtransSnapToken = snapToken;
       responseData.snapRedirectUrl = snapRedirectUrl;
     }
 

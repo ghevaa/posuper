@@ -10,9 +10,13 @@ import { useAuthStore } from '../stores/auth.store';
 import { formatCurrency, getProductImageUrl } from '../lib/utils';
 import {
   Search, Plus, Minus, Trash2, ShoppingCart, CreditCard,
-  Loader2, X, Printer, CheckCircle2,
+  Loader2, X, Printer, CheckCircle2, Bluetooth, Wifi,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
+import {
+  isBLESupported, isPrinterConnected, connectPrinter,
+  printReceipt, type ReceiptData,
+} from '../lib/bluetooth-printer';
 
 interface ProductVariantData {
   id: string;
@@ -51,7 +55,8 @@ export default function POSPage() {
   const [lastTransaction, setLastTransaction] = useState<any>(null);
   const [paying, setPaying] = useState(false);
   const [variantSelectionProduct, setVariantSelectionProduct] = useState<ProductData | null>(null);
-  const [paymentMethod, setPaymentMethod] = useState<'cash' | 'qris'>('cash');
+  const [paymentMethod, setPaymentMethod] = useState<'cash' | 'online'>('cash');
+  const [printing, setPrinting] = useState(false);
   const searchRef = useRef<HTMLInputElement>(null);
 
   const { items, addItem, removeItem, incrementQty, decrementQty, clearCart, getSubtotal } = useCartStore();
@@ -101,10 +106,42 @@ export default function POSPage() {
     return () => window.removeEventListener('keydown', handler);
   }, [search, products, addItem]);
 
+  // --- Bluetooth Print Handler ---
+  const handleBluetoothPrint = async () => {
+    if (!lastTransaction) return;
+    setPrinting(true);
+    try {
+      const receiptData: ReceiptData = {
+        storeName: "D'Mac Chicken Crunch",
+        invoiceNo: lastTransaction.invoiceNo || '-',
+        cashierName: user?.name || 'Kasir',
+        items: (lastTransaction.items || items).map((i: any) => ({
+          name: i.productName || i.name,
+          qty: i.qty,
+          price: Number(i.price),
+          variantName: i.variantName,
+        })),
+        subtotal: Number(lastTransaction.total),
+        total: Number(lastTransaction.total),
+        paidAmount: Number(lastTransaction.paidAmount || lastTransaction.total),
+        changeAmount: Number(lastTransaction.changeAmount || 0),
+        paymentMethod: lastTransaction.paymentMethod || 'cash',
+        date: new Date(),
+      };
+      await printReceipt(receiptData);
+      toast.success('Struk berhasil dicetak!');
+    } catch (err: any) {
+      console.error('Print error:', err);
+      toast.error(err.message || 'Gagal mencetak struk');
+    } finally {
+      setPrinting(false);
+    }
+  };
+
   const handlePay = async () => {
-    const isQris = paymentMethod === 'qris';
+    const isOnline = paymentMethod === 'online';
     const paid = Number(paidAmount);
-    if (!isQris && paid < subtotal) {
+    if (!isOnline && paid < subtotal) {
       toast.error('Jumlah bayar kurang!');
       return;
     }
@@ -119,45 +156,55 @@ export default function POSPage() {
           variantId: i.variantId || null,
           variantName: i.variantName || null,
         })),
-        paidAmount: isQris ? subtotal : paid,
+        paidAmount: isOnline ? subtotal : paid,
         discount: 0,
         taxRate: 0,
-        paymentMethod,
+        paymentMethod: isOnline ? 'qris' : 'cash',
       });
 
-      if (isQris && res.data.midtransSnapToken) {
+      if (isOnline && res.data.midtransSnapToken) {
+        // Try Snap popup first
         if ((window as any).snap) {
           (window as any).snap.pay(res.data.midtransSnapToken, {
             onSuccess: (result: any) => {
-              console.log('Midtrans Snap Success:', result);
+              console.log('Midtrans Success:', result);
               setLastTransaction(res.data);
               clearCart();
               setShowPayment(false);
               setShowReceipt(true);
               setPaidAmount('');
-              toast.success('Pembayaran QRIS Berhasil!');
+              toast.success('Pembayaran Online Berhasil!');
               qc.invalidateQueries({ queryKey: ['products'] });
             },
             onPending: (result: any) => {
-              console.log('Midtrans Snap Pending:', result);
+              console.log('Midtrans Pending:', result);
               setLastTransaction(res.data);
               clearCart();
               setShowPayment(false);
               setPaidAmount('');
-              toast.success('Menunggu Pembayaran QRIS');
+              toast.success('Menunggu Pembayaran Online...');
               qc.invalidateQueries({ queryKey: ['products'] });
             },
             onError: (result: any) => {
-              console.error('Midtrans Snap Error:', result);
-              toast.error('Pembayaran QRIS Gagal!');
+              console.error('Midtrans Error:', result);
+              toast.error('Pembayaran Online Gagal!');
             },
             onClose: () => {
-              console.log('Midtrans Snap Closed');
-              toast.error('Pemberitahuan: QRIS ditutup. Hubungi admin jika sudah bayar.');
+              console.log('Midtrans Closed');
+              toast('Pembayaran ditutup. Hubungi admin jika sudah bayar.', { icon: '⚠️' });
             }
           });
+        } else if (res.data.snapRedirectUrl) {
+          // Fallback: open payment page in external browser (works in Tauri)
+          window.open(res.data.snapRedirectUrl, '_blank');
+          setLastTransaction(res.data);
+          clearCart();
+          setShowPayment(false);
+          setPaidAmount('');
+          toast.success('Halaman pembayaran dibuka di browser. Selesaikan pembayaran di sana.');
+          qc.invalidateQueries({ queryKey: ['products'] });
         } else {
-          toast.error('Gagal memuat Snap JS Midtrans!');
+          toast.error('Gagal memuat halaman pembayaran Midtrans!');
         }
       } else {
         setLastTransaction(res.data);
@@ -337,10 +384,10 @@ export default function POSPage() {
               </button>
               <button
                 type="button"
-                onClick={() => setPaymentMethod('qris')}
-                className={`btn flex-grow ${paymentMethod === 'qris' ? 'btn-primary' : 'btn-secondary'}`}
+                onClick={() => setPaymentMethod('online')}
+                className={`btn flex-grow ${paymentMethod === 'online' ? 'btn-primary' : 'btn-secondary'}`}
               >
-                QRIS (Midtrans)
+                <Wifi size={16} /> Online (Midtrans)
               </button>
             </div>
 
@@ -349,10 +396,11 @@ export default function POSPage() {
               <p className="text-3xl font-bold gradient-text">{formatCurrency(subtotal)}</p>
             </div>
 
-            {paymentMethod === 'qris' ? (
+            {paymentMethod === 'online' ? (
               <div className="text-center p-6 border border-dashed border-[var(--color-border)] rounded-lg bg-[var(--color-surface)]">
-                <p className="text-sm font-semibold text-orange-400 mb-2">Metode QRIS Terpilih</p>
-                <p className="text-xs text-[var(--color-text-dim)]">Setelah klik konfirmasi, pop-up pembayaran QRIS Midtrans akan muncul untuk dipindai oleh pelanggan.</p>
+                <p className="text-sm font-semibold text-orange-400 mb-2">Pembayaran Online Terpilih</p>
+                <p className="text-xs text-[var(--color-text-dim)]">Setelah klik konfirmasi, halaman pembayaran Midtrans akan muncul.</p>
+                <p className="text-xs text-[var(--color-text-dim)] mt-1">Tersedia: QRIS, GoPay, ShopeePay, Transfer Bank, Kartu Kredit, dll.</p>
               </div>
             ) : (
               <>
@@ -392,7 +440,7 @@ export default function POSPage() {
 
             <button
               onClick={handlePay}
-              disabled={paying || (paymentMethod === 'cash' && Number(paidAmount) < subtotal)}
+              disabled={paying || (paymentMethod === 'cash' && Number(paidAmount) < subtotal) || (paymentMethod === 'online' && subtotal < 100)}
               className="btn btn-success w-full btn-lg mt-6"
             >
               {paying ? <Loader2 size={20} className="animate-spin" /> : (
@@ -429,9 +477,20 @@ export default function POSPage() {
               <button onClick={() => setShowReceipt(false)} className="btn btn-secondary flex-1">
                 Tutup
               </button>
-              <button className="btn btn-primary flex-1">
-                <Printer size={16} /> Cetak Struk
-              </button>
+              {isBLESupported() ? (
+                <button
+                  onClick={handleBluetoothPrint}
+                  disabled={printing}
+                  className="btn btn-primary flex-1"
+                >
+                  {printing ? <Loader2 size={16} className="animate-spin" /> : <Bluetooth size={16} />}
+                  {isPrinterConnected() ? 'Cetak Struk' : 'Hubungkan Printer'}
+                </button>
+              ) : (
+                <button onClick={() => window.print()} className="btn btn-primary flex-1">
+                  <Printer size={16} /> Cetak Struk
+                </button>
+              )}
             </div>
           </div>
         </div>
