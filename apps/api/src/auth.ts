@@ -45,6 +45,10 @@ export const auth = betterAuth({
       : ['http://localhost:5174']),
     'http://localhost:5173',
     'http://localhost:5174',
+    'tauri://localhost',
+    'http://tauri.localhost',
+    'capacitor://localhost',
+    'http://localhost',
   ],
 });
 

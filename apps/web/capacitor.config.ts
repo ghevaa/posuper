@@ -5,19 +5,18 @@ const config: CapacitorConfig = {
   appName: "D'Mac Chicken Crunch",
   webDir: 'dist',
   server: {
-    // Load from VPS server so app always has latest UI without APK rebuild
-    url: 'http://72.61.214.92:8080',
-    cleartext: true,  // Allow HTTP (non-HTTPS) connections
+    // Allow navigation to Midtrans payment pages
     allowNavigation: [
       'app.sandbox.midtrans.com',
       'app.midtrans.com',
       '72.61.214.92',
     ],
+    // Allow HTTP (non-HTTPS) for API calls to VPS
+    cleartext: true,
   },
   plugins: {
     SplashScreen: {
       launchAutoHide: true,
-      androidScaleType: 'CENTER_CROP',
       showSpinner: true,
       spinnerColor: '#f97316',
       backgroundColor: '#0f172a',
