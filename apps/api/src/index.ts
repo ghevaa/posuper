@@ -98,6 +98,7 @@ async function start() {
       'http://tauri.localhost',
       'capacitor://localhost',
       'http://localhost',
+      'https://localhost',
     ],
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
     credentials: true,
