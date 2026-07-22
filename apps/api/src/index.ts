@@ -124,6 +124,23 @@ async function start() {
     decorateReply: false,
   });
 
+  // Serve Web Frontend if dist exists (Full thin-client support for mobile APK / browser)
+  const webDistDir = path.join(__dirname, '../../web/dist');
+  if (fs.existsSync(webDistDir)) {
+    await app.register(fastifyStatic, {
+      root: webDistDir,
+      prefix: '/',
+      decorateReply: false,
+    });
+
+    app.setNotFoundHandler((req, reply) => {
+      if (req.raw.url?.startsWith('/api') || req.raw.url?.startsWith('/auth')) {
+        return reply.status(404).send({ message: `Route ${req.method}:${req.url} not found`, error: 'Not Found', statusCode: 404 });
+      }
+      return reply.sendFile('index.html', webDistDir);
+    });
+  }
+
   // Health check
   app.get('/api/health', async () => ({
     success: true,

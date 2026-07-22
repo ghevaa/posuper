@@ -5,6 +5,8 @@ const config: CapacitorConfig = {
   appName: "D'Mac Chicken Crunch",
   webDir: 'dist',
   server: {
+    // Load live UI from VPS so mobile UI updates automatically without reinstalling APK
+    url: 'http://72.61.214.92:8080',
     // Allow navigation to Midtrans payment pages
     allowNavigation: [
       'app.sandbox.midtrans.com',
