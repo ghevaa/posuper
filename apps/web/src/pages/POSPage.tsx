@@ -15,7 +15,7 @@ import {
 import toast from 'react-hot-toast';
 import {
   isBLESupported, isPrinterConnected, connectPrinter,
-  printReceipt, type ReceiptData,
+  printReceipt, printKitchenTicket, type ReceiptData,
 } from '../lib/bluetooth-printer';
 
 interface ProductVariantData {
@@ -128,12 +128,38 @@ export default function POSPage() {
         changeAmount: Number(lastTransaction.changeAmount || 0),
         paymentMethod: lastTransaction.paymentMethod || 'cash',
         date: new Date(),
+        paperSize: '80mm',
       };
       await printReceipt(receiptData);
-      toast.success('Struk berhasil dicetak!');
+      toast.success('Struk Kasir (80mm) berhasil dicetak!');
     } catch (err: any) {
       console.error('Print error:', err);
       toast.error(err.message || 'Gagal mencetak struk');
+    } finally {
+      setPrinting(false);
+    }
+  };
+
+  const handleKitchenPrint = async () => {
+    if (!lastTransaction) return;
+    setPrinting(true);
+    try {
+      await printKitchenTicket({
+        invoiceNo: lastTransaction.invoiceNo || '-',
+        cashierName: user?.name || 'Kasir',
+        items: (lastTransaction.items || items).map((i: any) => ({
+          name: i.productName || i.name,
+          qty: i.qty,
+          price: Number(i.price),
+          variantName: i.variantName,
+        })),
+        date: new Date(),
+        paperSize: '58mm',
+      });
+      toast.success('Nota Dapur (58mm/50mm) berhasil dicetak!');
+    } catch (err: any) {
+      console.error('Print kitchen error:', err);
+      toast.error(err.message || 'Gagal mencetak nota dapur');
     } finally {
       setPrinting(false);
     }
@@ -589,24 +615,34 @@ export default function POSPage() {
               </div>
             </div>
 
-            <div className="flex gap-2">
-              <button onClick={() => setShowReceipt(false)} className="btn btn-secondary flex-1">
-                Tutup
-              </button>
+            <div className="flex flex-col gap-2">
               {isBLESupported() ? (
-                <button
-                  onClick={handleBluetoothPrint}
-                  disabled={printing}
-                  className="btn btn-primary flex-1"
-                >
-                  {printing ? <Loader2 size={16} className="animate-spin" /> : <Bluetooth size={16} />}
-                  {isPrinterConnected() ? 'Cetak Struk' : 'Hubungkan Printer'}
-                </button>
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    onClick={handleBluetoothPrint}
+                    disabled={printing}
+                    className="btn btn-primary text-xs py-2.5"
+                  >
+                    {printing ? <Loader2 size={14} className="animate-spin" /> : <Printer size={14} />}
+                    Struk Kasir (80mm)
+                  </button>
+                  <button
+                    onClick={handleKitchenPrint}
+                    disabled={printing}
+                    className="btn btn-secondary text-xs py-2.5 border border-[var(--color-primary-500)]/40"
+                  >
+                    {printing ? <Loader2 size={14} className="animate-spin" /> : <Printer size={14} />}
+                    Nota Dapur (58/50mm)
+                  </button>
+                </div>
               ) : (
-                <button onClick={() => window.print()} className="btn btn-primary flex-1">
+                <button onClick={() => window.print()} className="btn btn-primary w-full">
                   <Printer size={16} /> Cetak Struk
                 </button>
               )}
+              <button onClick={() => setShowReceipt(false)} className="btn btn-ghost w-full text-xs">
+                Tutup
+              </button>
             </div>
           </div>
         </div>

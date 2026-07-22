@@ -184,7 +184,7 @@ function formatCurrency(amount: number): string {
   return 'Rp ' + amount.toLocaleString('id-ID');
 }
 
-// --- Receipt Printing ---
+// --- Receipt & Kitchen Printing ---
 
 export interface ReceiptItem {
   name: string;
@@ -204,27 +204,33 @@ export interface ReceiptData {
   changeAmount: number;
   paymentMethod: string;
   date: Date;
+  paperSize?: '58mm' | '80mm';
 }
 
 export async function printReceipt(receipt: ReceiptData): Promise<void> {
   if (!isPrinterConnected()) {
-    // Try to reconnect
     await connectPrinter();
   }
 
-  const lines: Uint8Array[] = [];
+  // 80mm = 48 chars/line, 58mm/50mm = 32 chars/line
+  const paperWidth = receipt.paperSize === '58mm' ? 32 : 48;
 
-  // Helper to add text line
+  const padLine = (left: string, right: string): string => {
+    const spaces = paperWidth - left.length - right.length;
+    return left + ' '.repeat(Math.max(1, spaces)) + right;
+  };
+
+  const dashLine = (): string => '-'.repeat(paperWidth);
+
+  const lines: Uint8Array[] = [];
   const addLine = (text: string) => {
     lines.push(encode(text + '\n'));
   };
 
-  // --- Build Receipt ---
-
   // Init
   lines.push(CMD.INIT);
 
-  // Store header (centered, bold, double size)
+  // Store header
   lines.push(CMD.ALIGN_CENTER);
   lines.push(CMD.FONT_DOUBLE_H);
   lines.push(CMD.BOLD_ON);
@@ -233,7 +239,7 @@ export async function printReceipt(receipt: ReceiptData): Promise<void> {
   lines.push(CMD.BOLD_OFF);
   lines.push(CMD.LINE);
 
-  // Invoice & Date
+  // Invoice info
   lines.push(CMD.ALIGN_LEFT);
   addLine(dashLine());
   addLine(`No: ${receipt.invoiceNo}`);
@@ -251,9 +257,8 @@ export async function printReceipt(receipt: ReceiptData): Promise<void> {
       ? `${item.name} (${item.variantName})`
       : item.name;
 
-    // Truncate name if too long
-    const displayName = itemName.length > PAPER_WIDTH - 2
-      ? itemName.substring(0, PAPER_WIDTH - 5) + '...'
+    const displayName = itemName.length > paperWidth - 2
+      ? itemName.substring(0, paperWidth - 5) + '...'
       : itemName;
 
     addLine(displayName);
@@ -289,9 +294,62 @@ export async function printReceipt(receipt: ReceiptData): Promise<void> {
   lines.push(CMD.FEED_5);
   lines.push(CMD.PARTIAL_CUT);
 
-  // Concat all and send
   const receiptData = concat(...lines);
   await sendData(receiptData);
+}
+
+// --- Kitchen Order Ticket Printing (58mm/50mm Dapur) ---
+export interface KitchenTicketData {
+  invoiceNo: string;
+  cashierName: string;
+  items: ReceiptItem[];
+  date: Date;
+  paperSize?: '58mm' | '80mm';
+}
+
+export async function printKitchenTicket(data: KitchenTicketData): Promise<void> {
+  if (!isPrinterConnected()) {
+    await connectPrinter();
+  }
+
+  const paperWidth = data.paperSize === '80mm' ? 48 : 32; // Default 58mm/50mm for kitchen
+  const dashLine = (): string => '-'.repeat(paperWidth);
+
+  const lines: Uint8Array[] = [];
+  const addLine = (text: string) => {
+    lines.push(encode(text + '\n'));
+  };
+
+  lines.push(CMD.INIT);
+  lines.push(CMD.ALIGN_CENTER);
+  lines.push(CMD.FONT_DOUBLE);
+  lines.push(CMD.BOLD_ON);
+  addLine('*** NOTA DAPUR ***');
+  lines.push(CMD.FONT_NORMAL);
+  lines.push(CMD.BOLD_OFF);
+  lines.push(CMD.LINE);
+
+  lines.push(CMD.ALIGN_LEFT);
+  addLine(dashLine());
+  addLine(`No Inv: ${data.invoiceNo}`);
+  addLine(`Waktu : ${data.date.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })}`);
+  addLine(dashLine());
+
+  // Kitchen items in large text
+  lines.push(CMD.BOLD_ON);
+  for (const item of data.items) {
+    const qtyText = `[ ${item.qty}x ] `;
+    const itemName = item.variantName ? `${item.name} (${item.variantName})` : item.name;
+    addLine(qtyText + itemName);
+  }
+  lines.push(CMD.BOLD_OFF);
+
+  addLine(dashLine());
+  lines.push(CMD.FEED_5);
+  lines.push(CMD.PARTIAL_CUT);
+
+  const ticketData = concat(...lines);
+  await sendData(ticketData);
 }
 
 // --- Quick Test Print ---
