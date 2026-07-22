@@ -17,7 +17,7 @@ COPY apps/api ./apps/api
 COPY apps/web ./apps/web
 
 # Install dependencies (workspaces auto-resolved)
-RUN npm install --legacy-peer-deps
+RUN npm install --legacy-peer-deps --force
 
 # Build typescript projects and web app
 RUN npm run build -w packages/config && npm run build -w packages/types && npm run build -w apps/api && npm run build -w apps/web
@@ -34,7 +34,7 @@ COPY apps/api/package.json ./apps/api/package.json
 COPY apps/web/package.json ./apps/web/package.json
 
 # Install prod dependencies
-RUN npm install --omit=dev --legacy-peer-deps
+RUN npm install --omit=dev --legacy-peer-deps --force
 
 # Copy builds
 COPY --from=builder /app/packages/config/dist ./packages/config/dist
