@@ -57,6 +57,7 @@ export default function POSPage() {
   const [variantSelectionProduct, setVariantSelectionProduct] = useState<ProductData | null>(null);
   const [paymentMethod, setPaymentMethod] = useState<'cash' | 'online'>('cash');
   const [printing, setPrinting] = useState(false);
+  const [showMobileCart, setShowMobileCart] = useState(false);
   const searchRef = useRef<HTMLInputElement>(null);
 
   const { items, addItem, removeItem, incrementQty, decrementQty, clearCart, getSubtotal } = useCartStore();
@@ -234,7 +235,7 @@ export default function POSPage() {
   const quickAmounts = [subtotal, Math.ceil(subtotal / 10000) * 10000, Math.ceil(subtotal / 50000) * 50000, 100000, 200000, 500000].filter((v, i, a) => v >= subtotal && a.indexOf(v) === i).slice(0, 6);
 
   return (
-    <div className="flex gap-6 h-[calc(100vh-5rem)]">
+    <div className="flex flex-col lg:flex-row gap-4 lg:gap-6 h-auto lg:h-[calc(100vh-5rem)] relative pb-20 lg:pb-0">
       {/* LEFT — Products */}
       <div className="flex-1 flex flex-col min-w-0">
         {/* Search + Categories */}
@@ -251,10 +252,10 @@ export default function POSPage() {
               autoFocus
             />
           </div>
-          <div className="flex gap-2 flex-wrap">
+          <div className="flex gap-2 overflow-x-auto pb-1 no-scrollbar">
             <button
               onClick={() => setSelectedCategory(null)}
-              className={`btn btn-sm ${!selectedCategory ? 'btn-primary' : 'btn-secondary'}`}
+              className={`btn btn-sm shrink-0 ${!selectedCategory ? 'btn-primary' : 'btn-secondary'}`}
             >
               Semua
             </button>
@@ -262,7 +263,7 @@ export default function POSPage() {
               <button
                 key={cat.id}
                 onClick={() => setSelectedCategory(cat.id)}
-                className={`btn btn-sm ${selectedCategory === cat.id ? 'btn-primary' : 'btn-secondary'}`}
+                className={`btn btn-sm shrink-0 ${selectedCategory === cat.id ? 'btn-primary' : 'btn-secondary'}`}
               >
                 {cat.icon} {cat.name}
               </button>
@@ -271,27 +272,31 @@ export default function POSPage() {
         </div>
 
         {/* Product Grid */}
-        <div className="flex-1 overflow-y-auto">
+        <div className="flex-1 overflow-y-auto max-h-[60vh] lg:max-h-none pr-1">
           {productsLoading ? (
             <div className="flex items-center justify-center h-40"><div className="spinner" /></div>
           ) : (
-            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-3 lg:grid-cols-4 gap-2.5 sm:gap-3">
               {filteredProducts.map((product) => (
                 <button
                   key={product.id}
                   onClick={() => handleProductClick(product)}
-                  className="glass-card p-4 text-left hover:border-[var(--color-primary-500)] transition-colors group"
+                  className="glass-card p-3 sm:p-4 text-left hover:border-[var(--color-primary-500)] transition-colors group flex flex-col justify-between h-full"
                 >
-                  <div className="w-full h-20 rounded-lg bg-[var(--color-surface)] mb-3 flex items-center justify-center text-3xl group-hover:scale-105 transition-transform">
-                    {product.image ? (
-                      <img src={getProductImageUrl(product.image)} alt={product.name} className="w-full h-full object-cover rounded-lg" />
-                    ) : '📦'}
+                  <div>
+                    <div className="w-full h-20 sm:h-24 rounded-lg bg-[var(--color-surface)] mb-2 flex items-center justify-center text-3xl group-hover:scale-105 transition-transform overflow-hidden">
+                      {product.image ? (
+                        <img src={getProductImageUrl(product.image)} alt={product.name} className="w-full h-full object-cover rounded-lg" />
+                      ) : '📦'}
+                    </div>
+                    <p className="font-medium text-xs sm:text-sm line-clamp-2 leading-tight">{product.name}</p>
                   </div>
-                  <p className="font-medium text-sm truncate">{product.name}</p>
-                  <p className="text-[var(--color-primary-400)] font-semibold text-sm mt-1">
-                    {formatCurrency(Number(product.price))}
-                  </p>
-                  <p className="text-[11px] text-[var(--color-text-dim)] mt-1">Stok: {product.stock}</p>
+                  <div className="mt-2">
+                    <p className="text-[var(--color-primary-400)] font-semibold text-xs sm:text-sm">
+                      {formatCurrency(Number(product.price))}
+                    </p>
+                    <p className="text-[10px] sm:text-[11px] text-[var(--color-text-dim)]">Stok: {product.stock}</p>
+                  </div>
                 </button>
               ))}
             </div>
@@ -299,8 +304,8 @@ export default function POSPage() {
         </div>
       </div>
 
-      {/* RIGHT — Cart */}
-      <div className="w-[380px] flex flex-col glass-card">
+      {/* RIGHT — Desktop Cart */}
+      <div className="hidden lg:flex w-[380px] flex-col glass-card shrink-0">
         <div className="flex items-center gap-2 p-4 border-b border-[var(--color-border)]">
           <ShoppingCart size={20} className="text-[var(--color-primary-400)]" />
           <h2 className="font-semibold text-lg">Keranjang</h2>
@@ -331,7 +336,7 @@ export default function POSPage() {
                     <Plus size={14} />
                   </button>
                 </div>
-                <p className="font-semibold text-sm w-24 text-right">{formatCurrency(item.subtotal)}</p>
+                <p className="font-semibold text-sm w-20 text-right">{formatCurrency(item.subtotal)}</p>
                 <button onClick={() => removeItem(item.cartItemId)} className="text-[var(--color-text-dim)] hover:text-red-400">
                   <Trash2 size={14} />
                 </button>
@@ -361,6 +366,117 @@ export default function POSPage() {
           </button>
         </div>
       </div>
+
+      {/* MOBILE — Floating Bottom Bar */}
+      <div className="lg:hidden fixed bottom-0 left-0 right-0 p-3 bg-[var(--color-surface-light)] border-t border-[var(--color-border)] z-30 shadow-2xl flex items-center justify-between gap-2 backdrop-blur-md">
+        <div className="flex items-center gap-2 cursor-pointer" onClick={() => setShowMobileCart(true)}>
+          <div className="relative">
+            <ShoppingCart size={22} className="text-[var(--color-primary-400)]" />
+            {items.length > 0 && (
+              <span className="absolute -top-2 -right-2 bg-blue-600 text-white text-[10px] font-bold w-4 h-4 rounded-full flex items-center justify-center">
+                {items.length}
+              </span>
+            )}
+          </div>
+          <div>
+            <p className="text-[10px] text-[var(--color-text-dim)]">{items.length} Item</p>
+            <p className="font-bold text-xs text-[var(--color-primary-400)]">{formatCurrency(subtotal)}</p>
+          </div>
+        </div>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => setShowMobileCart(true)}
+            className="btn btn-secondary btn-sm text-xs"
+          >
+            Keranjang
+          </button>
+          <button
+            onClick={() => {
+              if (items.length === 0) { toast.error('Keranjang kosong!'); return; }
+              setShowPayment(true);
+              setPaymentMethod('cash');
+              setPaidAmount(String(subtotal));
+            }}
+            disabled={items.length === 0}
+            className="btn btn-success btn-sm text-xs"
+          >
+            <CreditCard size={14} /> Bayar
+          </button>
+        </div>
+      </div>
+
+      {/* MOBILE — Full Cart Drawer Modal */}
+      {showMobileCart && (
+        <div className="modal-overlay lg:hidden" onClick={() => setShowMobileCart(false)}>
+          <div className="modal-content w-full max-w-md h-[85vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between pb-3 border-b border-[var(--color-border)]">
+              <div className="flex items-center gap-2">
+                <ShoppingCart size={20} className="text-[var(--color-primary-400)]" />
+                <h3 className="font-bold text-base">Keranjang Belanja</h3>
+                <span className="badge badge-info">{items.length} item</span>
+              </div>
+              <button onClick={() => setShowMobileCart(false)} className="btn btn-ghost btn-icon">
+                <X size={20} />
+              </button>
+            </div>
+
+            {/* Items List */}
+            <div className="flex-1 overflow-y-auto py-3 space-y-2">
+              {items.length === 0 ? (
+                <div className="text-center text-[var(--color-text-dim)] py-12">
+                  <ShoppingCart size={48} className="mx-auto mb-3 opacity-30" />
+                  <p className="text-sm">Keranjang kosong</p>
+                  <p className="text-xs mt-1">Pilih produk untuk menambahkan</p>
+                </div>
+              ) : (
+                items.map((item) => (
+                  <div key={item.cartItemId} className="flex items-center gap-2 p-2.5 rounded-lg bg-[var(--color-surface)] border border-[var(--color-border)]">
+                    <div className="flex-1 min-w-0">
+                      <p className="font-medium text-xs truncate">{item.productName}</p>
+                      <p className="text-[var(--color-primary-400)] text-[11px]">{formatCurrency(item.price)}</p>
+                    </div>
+                    <div className="flex items-center gap-1">
+                      <button onClick={() => decrementQty(item.cartItemId)} className="btn btn-ghost btn-icon btn-sm">
+                        <Minus size={12} />
+                      </button>
+                      <span className="w-6 text-center text-xs font-semibold">{item.qty}</span>
+                      <button onClick={() => incrementQty(item.cartItemId)} className="btn btn-ghost btn-icon btn-sm">
+                        <Plus size={12} />
+                      </button>
+                    </div>
+                    <p className="font-semibold text-xs text-right min-w-16">{formatCurrency(item.subtotal)}</p>
+                    <button onClick={() => removeItem(item.cartItemId)} className="text-[var(--color-text-dim)] hover:text-red-400 p-1">
+                      <Trash2 size={14} />
+                    </button>
+                  </div>
+                ))
+              )}
+            </div>
+
+            {/* Footer */}
+            <div className="pt-3 border-t border-[var(--color-border)] space-y-2">
+              <div className="flex justify-between items-center">
+                <span className="text-xs text-[var(--color-text-muted)]">Subtotal</span>
+                <span className="font-bold text-lg gradient-text">{formatCurrency(subtotal)}</span>
+              </div>
+              <button
+                onClick={() => {
+                  if (items.length === 0) { toast.error('Keranjang kosong!'); return; }
+                  setShowMobileCart(false);
+                  setShowPayment(true);
+                  setPaymentMethod('cash');
+                  setPaidAmount(String(subtotal));
+                }}
+                disabled={items.length === 0}
+                className="btn btn-success w-full btn-lg text-sm"
+              >
+                <CreditCard size={18} />
+                Lanjut ke Pembayaran
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Payment Modal */}
       {showPayment && (

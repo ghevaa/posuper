@@ -38,11 +38,17 @@ const developerLinks = [
 export default function DashboardLayout() {
   const { user, logout } = useAuthStore();
   const navigate = useNavigate();
-  const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [sidebarOpen, setSidebarOpen] = useState(() => typeof window !== 'undefined' && window.innerWidth >= 768);
 
   const handleLogout = async () => {
     await logout();
     navigate('/login');
+  };
+
+  const closeSidebarOnMobile = () => {
+    if (window.innerWidth < 768) {
+      setSidebarOpen(false);
+    }
   };
 
   const links = (() => {
@@ -60,20 +66,36 @@ export default function DashboardLayout() {
   })();
 
   return (
-    <div className="flex min-h-screen">
+    <div className="flex min-h-screen bg-[var(--color-surface)] text-[var(--color-text)] relative overflow-x-hidden">
+      {/* Mobile Backdrop Overlay */}
+      {sidebarOpen && (
+        <div
+          onClick={() => setSidebarOpen(false)}
+          className="fixed inset-0 bg-black/60 backdrop-blur-sm z-40 md:hidden transition-opacity"
+        />
+      )}
+
       {/* Sidebar */}
-      <aside className={`sidebar ${sidebarOpen ? '' : '-translate-x-full'}`}>
+      <aside className={`sidebar ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'} md:translate-x-0 ${sidebarOpen ? '' : 'md:-translate-x-full'} z-50`}>
         {/* Logo */}
-        <div className="flex items-center gap-3 px-5 py-5 border-b border-[var(--color-border)]">
-          <img 
-            src="/logo.jpg" 
-            alt="D'Mac Logo" 
-            className="w-10 h-10 rounded-xl object-cover border border-[var(--color-border)]"
-          />
-          <div className="min-w-0">
-            <h1 className="text-sm font-bold gradient-text truncate leading-tight">D'Mac Chicken</h1>
-            <p className="text-[10px] text-[var(--color-text-dim)] capitalize leading-none mt-1">{user?.role}</p>
+        <div className="flex items-center justify-between px-5 py-5 border-b border-[var(--color-border)]">
+          <div className="flex items-center gap-3">
+            <img 
+              src="/logo.jpg" 
+              alt="D'Mac Logo" 
+              className="w-10 h-10 rounded-xl object-cover border border-[var(--color-border)]"
+            />
+            <div className="min-w-0">
+              <h1 className="text-sm font-bold gradient-text truncate leading-tight">D'Mac Chicken</h1>
+              <p className="text-[10px] text-[var(--color-text-dim)] capitalize leading-none mt-1">{user?.role}</p>
+            </div>
           </div>
+          <button
+            onClick={() => setSidebarOpen(false)}
+            className="btn btn-ghost btn-icon md:hidden text-[var(--color-text-dim)] hover:text-white"
+          >
+            <X size={20} />
+          </button>
         </div>
 
         {/* Nav */}
@@ -88,6 +110,7 @@ export default function DashboardLayout() {
                   key={link.to}
                   to={link.to}
                   end={link.to === '/admin' || link.to === '/dev'}
+                  onClick={closeSidebarOnMobile}
                   className={({ isActive }) =>
                     `sidebar-link ${isActive ? 'active' : ''}`
                   }
@@ -103,14 +126,14 @@ export default function DashboardLayout() {
         {/* User + Logout */}
         <div className="p-4 border-t border-[var(--color-border)]">
           <div className="flex items-center gap-3 mb-3 px-1">
-            <div className="w-8 h-8 rounded-full bg-[var(--color-surface-lighter)] flex items-center justify-center text-sm font-semibold">
+            <div className="w-8 h-8 rounded-full bg-[var(--color-surface-lighter)] flex items-center justify-center text-sm font-semibold shrink-0">
               {user?.name?.charAt(0)?.toUpperCase()}
             </div>
             <div className="flex-1 min-w-0">
               <p className="text-sm font-medium truncate">{user?.name}</p>
               <p className="text-[11px] text-[var(--color-text-dim)] truncate flex items-center justify-between">
-                <span>{user?.email}</span>
-                <span className="text-[9px] bg-[var(--color-surface-lighter)] text-[var(--color-text-dim)] px-1 rounded font-mono">v0.1.3</span>
+                <span className="truncate">{user?.email}</span>
+                <span className="text-[9px] bg-[var(--color-surface-lighter)] text-[var(--color-text-dim)] px-1 rounded font-mono shrink-0 ml-1">v0.1.4</span>
               </p>
             </div>
           </div>
@@ -121,20 +144,31 @@ export default function DashboardLayout() {
         </div>
       </aside>
 
-      {/* Main */}
-      <div className={`flex-1 transition-all ${sidebarOpen ? 'ml-[260px]' : 'ml-0'}`}>
+      {/* Main Container */}
+      <div className={`flex-1 flex flex-col min-w-0 transition-all duration-300 ${sidebarOpen ? 'md:ml-[260px]' : 'ml-0'}`}>
         {/* Top bar */}
-        <header className="sticky top-0 z-30 flex items-center gap-4 px-6 py-3 bg-[var(--color-surface)]/80 backdrop-blur-md border-b border-[var(--color-border)]">
-          <button
-            onClick={() => setSidebarOpen(!sidebarOpen)}
-            className="btn btn-ghost btn-icon"
-          >
-            {sidebarOpen ? <X size={20} /> : <Menu size={20} />}
-          </button>
+        <header className="sticky top-0 z-30 flex items-center justify-between px-4 md:px-6 py-3 bg-[var(--color-surface)]/90 backdrop-blur-md border-b border-[var(--color-border)]">
+          <div className="flex items-center gap-3">
+            <button
+              onClick={() => setSidebarOpen(!sidebarOpen)}
+              className="btn btn-ghost btn-icon"
+              title="Toggle Menu"
+            >
+              <Menu size={20} />
+            </button>
+            <h2 className="text-sm md:text-base font-semibold text-[var(--color-text-muted)] hidden sm:block">
+              POS Yoga — Kasir & Management
+            </h2>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="text-xs px-2.5 py-1 rounded-full bg-[var(--color-surface-light)] border border-[var(--color-border)] text-[var(--color-text-muted)] capitalize">
+              {user?.role}
+            </span>
+          </div>
         </header>
 
-        {/* Content */}
-        <main className="p-6">
+        {/* Main Content Area */}
+        <main className="flex-1 p-3 sm:p-4 md:p-6 overflow-x-hidden">
           <Outlet />
         </main>
       </div>
