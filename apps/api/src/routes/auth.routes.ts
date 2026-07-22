@@ -43,6 +43,37 @@ export async function authRoutes(app: FastifyInstance) {
     return reply.send({ success: true, data: safeUsers });
   });
 
+  // Create new user (admin+)
+  app.post('/api/users', { preHandler: [requireRole('developer', 'admin')] }, async (req, reply) => {
+    const { name, email, password, role } = req.body as any;
+
+    if (!name || !email || !password) {
+      return reply.status(400).send({ success: false, error: 'Nama, email, dan password wajib diisi' });
+    }
+
+    const userRole = role && ['developer', 'admin', 'cashier'].includes(role) ? role : 'cashier';
+
+    try {
+      const res = await auth.api.signUpEmail({
+        body: {
+          name,
+          email,
+          password,
+        },
+      });
+
+      if (res.user) {
+        await db.update(user).set({ role: userRole }).where(eq(user.id, res.user.id));
+        await createAuditLog(req, 'user.created', `Created user ${email} with role ${userRole}`);
+        return reply.send({ success: true, message: 'Pengguna berhasil dibuat', data: { ...res.user, role: userRole } });
+      }
+
+      return reply.status(400).send({ success: false, error: 'Gagal membuat pengguna' });
+    } catch (err: any) {
+      return reply.status(400).send({ success: false, error: err.message || 'Gagal membuat pengguna' });
+    }
+  });
+
   // Update user role (developer only)
   app.patch('/api/users/:id/role', { preHandler: [requireRole('developer')] }, async (req, reply) => {
     const { id } = req.params as { id: string };

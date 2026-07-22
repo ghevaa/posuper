@@ -15,6 +15,7 @@ import AdminCategories from './pages/AdminCategories';
 import AdminTransactions from './pages/AdminTransactions';
 import AdminExpenses from './pages/AdminExpenses';
 import AdminStockOpname from './pages/AdminStockOpname';
+import AdminUsers from './pages/AdminUsers';
 import DevSettings from './pages/DevSettings';
 import { Toaster } from 'react-hot-toast';
 import UpdateChecker from './components/UpdateChecker';
@@ -136,7 +137,7 @@ export default function App() {
             path="admin/users"
             element={
               <ProtectedRoute allowedRoles={['admin', 'developer']}>
-                <div className="glass-card p-6"><h2 className="font-bold text-lg mb-2">Manajemen Pengguna</h2><p className="text-sm text-[var(--color-text-muted)]">Kelola akun kasir melalui endpoint registrasi.</p></div>
+                <AdminUsers />
               </ProtectedRoute>
             }
           />
