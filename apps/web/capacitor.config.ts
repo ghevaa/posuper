@@ -13,6 +13,8 @@ const config: CapacitorConfig = {
     ],
     // Allow HTTP (non-HTTPS) for API calls to VPS
     cleartext: true,
+    // Load app itself over http:// so it's not blocked as Mixed Content when calling http API
+    androidScheme: 'http',
   },
   plugins: {
     SplashScreen: {

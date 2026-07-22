@@ -5,12 +5,18 @@
 const API_BASE = '/api';
 const BASE_URL = import.meta.env.PROD ? 'http://72.61.214.92:8080' : '';
 
-// --- Tauri Detection & Token Management ---
+import { Capacitor } from '@capacitor/core';
+
+// --- Native Platform Detection & Token Management ---
+// Cookies don't reliably work cross-origin in Tauri or Android/iOS WebView (Capacitor),
+// so we use Bearer token auth for both instead of relying on cookies.
 const IS_TAURI = typeof window !== 'undefined' && !!(window as any).__TAURI_INTERNALS__;
+const IS_CAPACITOR = Capacitor.isNativePlatform();
+const IS_NATIVE = IS_TAURI || IS_CAPACITOR;
 const TOKEN_KEY = 'pos_yoga_session_token';
 
 function getStoredToken(): string | null {
-  if (!IS_TAURI) return null;
+  if (!IS_NATIVE) return null;
   try {
     return localStorage.getItem(TOKEN_KEY);
   } catch {
@@ -54,7 +60,7 @@ async function request<T>(url: string, options: FetchOptions = {}): Promise<T> {
   };
 
   const token = getStoredToken();
-  if (IS_TAURI && token) {
+  if (IS_NATIVE && token) {
     headers['Authorization'] = `Bearer ${token}`;
   }
 
@@ -98,9 +104,9 @@ export const authApi = {
       body: JSON.stringify({ email, password }),
     });
     // In Tauri, store session token for Bearer auth (cookies don't work cross-origin)
-    if (IS_TAURI && res?.session?.token) {
+    if (IS_NATIVE && res?.session?.token) {
       setStoredToken(res.session.token);
-    } else if (IS_TAURI && res?.token) {
+    } else if (IS_NATIVE && res?.token) {
       setStoredToken(res.token);
     }
     return res;
@@ -114,7 +120,7 @@ export const authApi = {
 
   logout: async () => {
     const res = await request<any>('/auth/api/sign-out', { method: 'POST' });
-    if (IS_TAURI) clearStoredToken();
+    if (IS_NATIVE) clearStoredToken();
     return res;
   },
 
