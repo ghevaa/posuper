@@ -9,7 +9,9 @@ import {
   BarChart3, Users, Settings, DollarSign, Clock,
   Shield, Database, FileText, LogOut, Menu, X, UserCircle, ClipboardList,
 } from 'lucide-react';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { useSyncStore } from '../stores/sync.store';
+import { Wifi, WifiOff, RefreshCw } from 'lucide-react';
 
 const cashierLinks = [
   { to: '/pos', icon: ShoppingCart, label: 'POS' },
@@ -39,6 +41,12 @@ export default function DashboardLayout() {
   const { user, logout } = useAuthStore();
   const navigate = useNavigate();
   const [sidebarOpen, setSidebarOpen] = useState(() => typeof window !== 'undefined' && window.innerWidth >= 768);
+  const { isOnline, pendingCount, isSyncing, initSyncStore, syncPendingTransactions } = useSyncStore();
+
+  useEffect(() => {
+    const cleanup = initSyncStore();
+    return cleanup;
+  }, [initSyncStore]);
 
   const handleLogout = async () => {
     await logout();
@@ -161,6 +169,34 @@ export default function DashboardLayout() {
             </h2>
           </div>
           <div className="flex items-center gap-2">
+            {/* Network & Sync Status Indicator */}
+            {isOnline ? (
+              pendingCount > 0 ? (
+                <button
+                  onClick={() => syncPendingTransactions()}
+                  disabled={isSyncing}
+                  className="text-xs px-2.5 py-1 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/40 flex items-center gap-1.5 hover:bg-amber-500/30 transition-colors cursor-pointer"
+                  title="Klik untuk sinkronkan transaksi ke VPS"
+                >
+                  <RefreshCw size={12} className={isSyncing ? 'animate-spin' : ''} />
+                  <span>{pendingCount} Pending</span>
+                </button>
+              ) : (
+                <span className="text-xs px-2.5 py-1 rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/40 flex items-center gap-1.5">
+                  <Wifi size={12} />
+                  <span>Online</span>
+                </span>
+              )
+            ) : (
+              <span
+                className="text-xs px-2.5 py-1 rounded-full bg-rose-500/20 text-rose-300 border border-rose-500/40 flex items-center gap-1.5"
+                title="Aplikasi berjalan offline. Transaksi tersimpan di perangkat lokal."
+              >
+                <WifiOff size={12} />
+                <span>Offline {pendingCount > 0 ? `(${pendingCount})` : ''}</span>
+              </span>
+            )}
+
             <span className="text-xs px-2.5 py-1 rounded-full bg-[var(--color-surface-light)] border border-[var(--color-border)] text-[var(--color-text-muted)] capitalize">
               {user?.role}
             </span>

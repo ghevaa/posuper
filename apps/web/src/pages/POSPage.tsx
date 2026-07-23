@@ -17,6 +17,10 @@ import {
   isBLESupported, isPrinterConnected, connectPrinter,
   printReceipt, printKitchenTicket, type ReceiptData,
 } from '../lib/bluetooth-printer';
+import {
+  offlineDB, cacheProductsAndCategories, getLocalProducts, getLocalCategories
+} from '../lib/offline-db';
+import { useSyncStore } from '../stores/sync.store';
 
 interface ProductVariantData {
   id: string;
@@ -65,12 +69,33 @@ export default function POSPage() {
 
   const { data: productsData, isLoading: productsLoading } = useQuery({
     queryKey: ['products'],
-    queryFn: () => api.get<{ data: ProductData[] }>('/products'),
+    queryFn: async () => {
+      try {
+        const res = await api.get<{ data: ProductData[] }>('/products');
+        if (res.data) {
+          cacheProductsAndCategories(res.data as any, categoriesData?.data as any || []);
+        }
+        return res;
+      } catch (err) {
+        console.warn('Offline mode: Loading products from IndexedDB');
+        const local = await getLocalProducts();
+        return { data: local as unknown as ProductData[] };
+      }
+    },
   });
 
   const { data: categoriesData } = useQuery({
     queryKey: ['categories'],
-    queryFn: () => api.get<{ data: CategoryData[] }>('/categories'),
+    queryFn: async () => {
+      try {
+        const res = await api.get<{ data: CategoryData[] }>('/categories');
+        return res;
+      } catch (err) {
+        console.warn('Offline mode: Loading categories from IndexedDB');
+        const local = await getLocalCategories();
+        return { data: local as unknown as CategoryData[] };
+      }
+    },
   });
 
   const products = productsData?.data || [];
@@ -166,13 +191,75 @@ export default function POSPage() {
   };
 
   const handlePay = async () => {
-    const isOnline = paymentMethod === 'online';
+    const isOnlinePayment = paymentMethod === 'online';
     const paid = Number(paidAmount);
-    if (!isOnline && paid < subtotal) {
+    if (!isOnlinePayment && paid < subtotal) {
       toast.error('Jumlah bayar kurang!');
       return;
     }
     setPaying(true);
+
+    const isNetworkOnline = typeof navigator !== 'undefined' ? navigator.onLine : true;
+
+    const processOfflineCheckout = async () => {
+      const now = new Date();
+      const localTxId = 'off_' + Math.random().toString(36).substring(2, 11);
+      const dateStr = now.toISOString().slice(0, 10).replace(/-/g, '');
+      const randStr = Math.floor(Math.random() * 10000).toString().padStart(4, '0');
+      const invoiceNo = `OFF-${dateStr}-${randStr}`;
+
+      const offlineTx = {
+        id: localTxId,
+        invoiceNo,
+        userId: user?.id,
+        items: items.map((i) => ({
+          productId: i.productId,
+          productName: i.productName,
+          price: i.price,
+          qty: i.qty,
+          variantId: i.variantId || null,
+          variantName: i.variantName || null,
+        })),
+        subtotal,
+        total: subtotal,
+        paidAmount: paid,
+        changeAmount: paid - subtotal > 0 ? paid - subtotal : 0,
+        paymentMethod: 'cash',
+        createdAt: now.toISOString(),
+        status: 'pending_sync' as const,
+      };
+
+      await offlineDB.pendingTransactions.add(offlineTx);
+      await useSyncStore.getState().updatePendingCount();
+
+      setLastTransaction({
+        id: localTxId,
+        invoiceNo,
+        total: subtotal,
+        paidAmount: paid,
+        changeAmount: paid - subtotal > 0 ? paid - subtotal : 0,
+        paymentMethod: 'cash',
+        items: items.map(i => ({ productName: i.productName, qty: i.qty, price: i.price, variantName: i.variantName })),
+      });
+
+      clearCart();
+      setShowPayment(false);
+      setShowReceipt(true);
+      setPaidAmount('');
+      toast.success('Transaksi tersimpan offline! Akan otomatis disinkronkan saat internet terhubung.', { icon: '💾', duration: 4000 });
+    };
+
+    if (!isNetworkOnline && !isOnlinePayment) {
+      try {
+        await processOfflineCheckout();
+      } catch (err: any) {
+        toast.error('Gagal menyimpan transaksi offline: ' + err.message);
+      } finally {
+        setPaying(false);
+      }
+      return;
+    }
+
     try {
       const res = await api.post<{ data: any }>('/transactions', {
         items: items.map((i) => ({
@@ -183,13 +270,13 @@ export default function POSPage() {
           variantId: i.variantId || null,
           variantName: i.variantName || null,
         })),
-        paidAmount: isOnline ? subtotal : paid,
+        paidAmount: isOnlinePayment ? subtotal : paid,
         discount: 0,
         taxRate: 0,
-        paymentMethod: isOnline ? 'qris' : 'cash',
+        paymentMethod: isOnlinePayment ? 'qris' : 'cash',
       });
 
-      if (isOnline && res.data.midtransSnapToken) {
+      if (isOnlinePayment && res.data.midtransSnapToken) {
         // Try Snap popup first
         if ((window as any).snap) {
           (window as any).snap.pay(res.data.midtransSnapToken, {
@@ -243,7 +330,12 @@ export default function POSPage() {
         qc.invalidateQueries({ queryKey: ['products'] });
       }
     } catch (err: any) {
-      toast.error(err.message);
+      if (!isOnlinePayment && (err.message?.includes('fetch') || err.message?.includes('network') || !navigator.onLine)) {
+        console.warn('Network error during checkout, falling back to offline checkout');
+        await processOfflineCheckout();
+      } else {
+        toast.error(err.message || 'Transaksi gagal');
+      }
     } finally {
       setPaying(false);
     }

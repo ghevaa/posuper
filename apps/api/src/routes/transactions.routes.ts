@@ -171,6 +171,100 @@ export async function transactionRoutes(app: FastifyInstance) {
     });
   });
 
+  // Bulk sync offline transactions
+  app.post('/api/transactions/sync-bulk', { preHandler: [requireAuth] }, async (req, reply) => {
+    const { transactions: offlineTxs } = req.body as { transactions: any[] };
+    const currentUser = (req as any).user;
+
+    if (!Array.isArray(offlineTxs) || offlineTxs.length === 0) {
+      return reply.send({ success: true, syncedIds: [], message: 'No transactions to sync' });
+    }
+
+    const syncedIds: string[] = [];
+
+    for (const tx of offlineTxs) {
+      try {
+        // Check if invoiceNo or ID already exists to avoid duplicate sync
+        const existing = await db.select({ id: transactions.id })
+          .from(transactions)
+          .where(eq(transactions.invoiceNo, tx.invoiceNo))
+          .limit(1);
+
+        if (existing.length > 0) {
+          syncedIds.push(tx.id);
+          continue;
+        }
+
+        const txId = tx.id || nanoid();
+        const invoiceNo = tx.invoiceNo || generateInvoiceNo();
+        const paymentMethod = tx.paymentMethod || 'cash';
+        const subtotal = Number(tx.subtotal || 0);
+        const discount = Number(tx.discount || 0);
+        const taxAmount = Number(tx.tax || 0);
+        const total = Number(tx.total || subtotal - discount + taxAmount);
+        const paidAmount = Number(tx.paidAmount || total);
+        const changeAmount = Number(tx.changeAmount || 0);
+        const items = tx.items || [];
+
+        // Insert transaction with status completed
+        await db.insert(transactions).values({
+          id: txId,
+          invoiceNo,
+          userId: tx.userId || currentUser.id,
+          subtotal: String(subtotal),
+          discount: String(discount),
+          tax: String(taxAmount),
+          total: String(total),
+          paidAmount: String(paidAmount),
+          changeAmount: String(changeAmount > 0 ? changeAmount : 0),
+          status: 'completed',
+          note: tx.note || 'Synced Offline Transaction',
+          paymentMethod,
+          createdAt: tx.createdAt ? new Date(tx.createdAt) : new Date(),
+        });
+
+        // Insert items & deduct stock
+        for (const item of items) {
+          await db.insert(transactionItems).values({
+            id: nanoid(),
+            transactionId: txId,
+            productId: item.productId,
+            productName: item.productName,
+            variantId: item.variantId || null,
+            variantName: item.variantName || null,
+            qty: item.qty,
+            price: String(item.price),
+            subtotal: String(item.price * item.qty),
+          });
+
+          // Deduct stock
+          await db.update(products)
+            .set({ stock: sql`${products.stock} - ${item.qty}` })
+            .where(eq(products.id, item.productId));
+        }
+
+        // Insert payment
+        await db.insert(payments).values({
+          id: nanoid(),
+          transactionId: txId,
+          method: paymentMethod,
+          amount: String(paidAmount),
+          createdAt: tx.createdAt ? new Date(tx.createdAt) : new Date(),
+        });
+
+        syncedIds.push(tx.id);
+      } catch (err: any) {
+        console.error(`Failed to sync offline transaction ${tx.invoiceNo}:`, err);
+      }
+    }
+
+    return reply.send({
+      success: true,
+      syncedIds,
+      message: `${syncedIds.length} of ${offlineTxs.length} transactions synced successfully`,
+    });
+  });
+
   // List transactions
   app.get('/api/transactions', { preHandler: [requireAuth] }, async (req, reply) => {
     const { page = '1', limit = '20', from, to } = req.query as any;
