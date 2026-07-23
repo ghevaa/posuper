@@ -7,6 +7,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '../lib/api';
 import { Plus, Pencil, Trash2, X, Loader2 } from 'lucide-react';
 import toast from 'react-hot-toast';
+import { getLocalCategories } from '../lib/offline-db';
 
 interface Category {
   id: string;
@@ -23,7 +24,14 @@ export default function AdminCategories() {
   const qc = useQueryClient();
   const { data: catRes, isLoading } = useQuery({
     queryKey: ['categories'],
-    queryFn: () => api.get<{ data: Category[] }>('/categories'),
+    queryFn: async () => {
+      try {
+        return await api.get<{ data: Category[] }>('/categories');
+      } catch {
+        const local = await getLocalCategories();
+        return { data: local as unknown as Category[] };
+      }
+    },
   });
 
   const categories = catRes?.data || [];
@@ -35,7 +43,7 @@ export default function AdminCategories() {
       toast.success('Kategori ditambahkan');
       closeForm();
     },
-    onError: (e: any) => toast.error(e.message),
+    onError: (e: any) => toast.error(e.message?.includes('fetch') ? 'Tambah kategori membutuhkan koneksi internet ke VPS' : e.message),
   });
 
   const updateMutation = useMutation({

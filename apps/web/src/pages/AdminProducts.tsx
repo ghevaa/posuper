@@ -8,6 +8,7 @@ import { api } from '../lib/api';
 import { formatCurrency, getProductImageUrl } from '../lib/utils';
 import { Plus, Pencil, Trash2, X, Loader2 } from 'lucide-react';
 import toast from 'react-hot-toast';
+import { getLocalProducts, getLocalCategories, cacheProductsAndCategories } from '../lib/offline-db';
 
 interface ProductVariant {
   id?: string;
@@ -74,8 +75,34 @@ export default function AdminProducts() {
   };
 
   const qc = useQueryClient();
-  const { data: productsRes, isLoading } = useQuery({ queryKey: ['products'], queryFn: () => api.get<{ data: Product[] }>('/products') });
-  const { data: catRes } = useQuery({ queryKey: ['categories'], queryFn: () => api.get<{ data: Category[] }>('/categories') });
+  const { data: productsRes, isLoading } = useQuery({
+    queryKey: ['products'],
+    queryFn: async () => {
+      try {
+        const res = await api.get<{ data: Product[] }>('/products');
+        if (res.data) {
+          cacheProductsAndCategories(res.data as any, catRes?.data as any || []);
+        }
+        return res;
+      } catch {
+        const local = await getLocalProducts();
+        return { data: local as unknown as Product[] };
+      }
+    },
+  });
+
+  const { data: catRes } = useQuery({
+    queryKey: ['categories'],
+    queryFn: async () => {
+      try {
+        const res = await api.get<{ data: Category[] }>('/categories');
+        return res;
+      } catch {
+        const local = await getLocalCategories();
+        return { data: local as unknown as Category[] };
+      }
+    },
+  });
 
   const products = productsRes?.data || [];
   const categories = catRes?.data || [];
@@ -83,16 +110,17 @@ export default function AdminProducts() {
   const createMutation = useMutation({
     mutationFn: (data: any) => api.post('/products', data),
     onSuccess: () => { qc.invalidateQueries({ queryKey: ['products'] }); toast.success('Produk ditambahkan'); closeForm(); },
-    onError: (e: any) => toast.error(e.message),
+    onError: (e: any) => toast.error(e.message?.includes('fetch') ? 'Tambah produk membutuhkan koneksi internet ke VPS' : e.message),
   });
   const updateMutation = useMutation({
     mutationFn: ({ id, data }: { id: string; data: any }) => api.put(`/products/${id}`, data),
     onSuccess: () => { qc.invalidateQueries({ queryKey: ['products'] }); toast.success('Produk diperbarui'); closeForm(); },
-    onError: (e: any) => toast.error(e.message),
+    onError: (e: any) => toast.error(e.message?.includes('fetch') ? 'Edit produk membutuhkan koneksi internet ke VPS' : e.message),
   });
   const deleteMutation = useMutation({
     mutationFn: (id: string) => api.delete(`/products/${id}`),
     onSuccess: () => { qc.invalidateQueries({ queryKey: ['products'] }); toast.success('Produk dihapus'); },
+    onError: (e: any) => toast.error(e.message?.includes('fetch') ? 'Hapus produk membutuhkan koneksi internet ke VPS' : e.message),
   });
 
   const openCreate = () => {
