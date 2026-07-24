@@ -9,6 +9,7 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@capacitor/network": "^8.0.1",
     "@pos-yoga/config": "*",
     "@pos-yoga/types": "*",
     "@tanstack/react-query": "^5.62.0",

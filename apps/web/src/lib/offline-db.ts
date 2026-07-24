@@ -74,18 +74,25 @@ class PosYogaOfflineDB extends Dexie {
 
 export const offlineDB = new PosYogaOfflineDB();
 
-// --- Helper Functions to Cache Products & Categories ---
+// --- Helper Functions to Cache Products & Categories Independently ---
 
-export async function cacheProductsAndCategories(products: OfflineProduct[], categories: OfflineCategory[]) {
+export async function cacheProducts(products: OfflineProduct[]) {
+  if (!Array.isArray(products) || products.length === 0) return;
   try {
-    await offlineDB.transaction('rw', [offlineDB.products, offlineDB.categories], async () => {
-      await offlineDB.products.clear();
-      await offlineDB.products.bulkPut(products);
-      await offlineDB.categories.clear();
-      await offlineDB.categories.bulkPut(categories);
-    });
+    await offlineDB.products.clear();
+    await offlineDB.products.bulkPut(products);
   } catch (err) {
-    console.error('Failed to cache products/categories in IndexedDB:', err);
+    console.error('Failed to cache products in IndexedDB:', err);
+  }
+}
+
+export async function cacheCategories(categories: OfflineCategory[]) {
+  if (!Array.isArray(categories) || categories.length === 0) return;
+  try {
+    await offlineDB.categories.clear();
+    await offlineDB.categories.bulkPut(categories);
+  } catch (err) {
+    console.error('Failed to cache categories in IndexedDB:', err);
   }
 }
 

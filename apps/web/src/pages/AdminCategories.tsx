@@ -7,7 +7,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '../lib/api';
 import { Plus, Pencil, Trash2, X, Loader2 } from 'lucide-react';
 import toast from 'react-hot-toast';
-import { getLocalCategories } from '../lib/offline-db';
+import { getLocalCategories, cacheCategories } from '../lib/offline-db';
 
 interface Category {
   id: string;
@@ -26,7 +26,11 @@ export default function AdminCategories() {
     queryKey: ['categories'],
     queryFn: async () => {
       try {
-        return await api.get<{ data: Category[] }>('/categories');
+        const res = await api.get<{ data: Category[] }>('/categories');
+        if (res.data) {
+          cacheCategories(res.data as any);
+        }
+        return res;
       } catch {
         const local = await getLocalCategories();
         return { data: local as unknown as Category[] };

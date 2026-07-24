@@ -8,7 +8,7 @@ import { api } from '../lib/api';
 import { formatCurrency, getProductImageUrl } from '../lib/utils';
 import { Plus, Pencil, Trash2, X, Loader2 } from 'lucide-react';
 import toast from 'react-hot-toast';
-import { getLocalProducts, getLocalCategories, cacheProductsAndCategories } from '../lib/offline-db';
+import { getLocalProducts, getLocalCategories, cacheProducts, cacheCategories } from '../lib/offline-db';
 
 interface ProductVariant {
   id?: string;
@@ -81,7 +81,7 @@ export default function AdminProducts() {
       try {
         const res = await api.get<{ data: Product[] }>('/products');
         if (res.data) {
-          cacheProductsAndCategories(res.data as any, catRes?.data as any || []);
+          cacheProducts(res.data as any);
         }
         return res;
       } catch {
@@ -96,6 +96,9 @@ export default function AdminProducts() {
     queryFn: async () => {
       try {
         const res = await api.get<{ data: Category[] }>('/categories');
+        if (res.data) {
+          cacheCategories(res.data as any);
+        }
         return res;
       } catch {
         const local = await getLocalCategories();

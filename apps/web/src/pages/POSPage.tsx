@@ -18,7 +18,7 @@ import {
   printReceipt, printKitchenTicket, type ReceiptData,
 } from '../lib/bluetooth-printer';
 import {
-  offlineDB, cacheProductsAndCategories, getLocalProducts, getLocalCategories
+  offlineDB, cacheProducts, cacheCategories, getLocalProducts, getLocalCategories
 } from '../lib/offline-db';
 import { useSyncStore } from '../stores/sync.store';
 
@@ -73,7 +73,7 @@ export default function POSPage() {
       try {
         const res = await api.get<{ data: ProductData[] }>('/products');
         if (res.data) {
-          cacheProductsAndCategories(res.data as any, categoriesData?.data as any || []);
+          cacheProducts(res.data as any);
         }
         return res;
       } catch (err) {
@@ -89,6 +89,9 @@ export default function POSPage() {
     queryFn: async () => {
       try {
         const res = await api.get<{ data: CategoryData[] }>('/categories');
+        if (res.data) {
+          cacheCategories(res.data as any);
+        }
         return res;
       } catch (err) {
         console.warn('Offline mode: Loading categories from IndexedDB');

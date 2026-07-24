@@ -6,6 +6,7 @@ import { create } from 'zustand';
 import { offlineDB } from '../lib/offline-db';
 import { api } from '../lib/api';
 import toast from 'react-hot-toast';
+import { Network } from '@capacitor/network';
 
 interface SyncState {
   isOnline: boolean;
@@ -24,15 +25,32 @@ export const useSyncStore = create<SyncState>((set, get) => ({
   initSyncStore: () => {
     if (typeof window === 'undefined') return () => {};
 
+    // Initial network check via Capacitor Network plugin
+    Network.getStatus().then((status) => {
+      set({ isOnline: status.connected });
+    }).catch(() => {
+      set({ isOnline: typeof navigator !== 'undefined' ? navigator.onLine : true });
+    });
+
+    // Listen for network changes via Capacitor Network plugin
+    const listenerPromise = Network.addListener('networkStatusChange', (status) => {
+      if (status.connected) {
+        set({ isOnline: true });
+        toast.success('Koneksi internet aktif kembali! Memulai sinkronisasi...', { icon: '🟢' });
+        get().syncPendingTransactions();
+      } else {
+        set({ isOnline: false });
+        toast.error('Internet terputus. Mode Offline Aktif', { icon: '🔴', duration: 4000 });
+      }
+    });
+
+    // Browser fallbacks
     const handleOnline = () => {
       set({ isOnline: true });
-      toast.success('Koneksi internet aktif kembali! Memulai sinkronisasi...', { icon: '🟢' });
       get().syncPendingTransactions();
     };
-
     const handleOffline = () => {
       set({ isOnline: false });
-      toast.error('Internet terputus. Mode Offline Aktif', { icon: '🔴', duration: 4000 });
     };
 
     window.addEventListener('online', handleOnline);
@@ -49,6 +67,7 @@ export const useSyncStore = create<SyncState>((set, get) => ({
     }, 30000);
 
     return () => {
+      listenerPromise.then((handle) => handle.remove()).catch(() => {});
       window.removeEventListener('online', handleOnline);
       window.removeEventListener('offline', handleOffline);
       clearInterval(interval);
