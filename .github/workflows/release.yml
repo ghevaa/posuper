@@ -43,6 +43,6 @@ jobs:
           tagName: v__VERSION__ # tauri-action replaces this with app version from tauri.conf.json
           releaseName: 'POS Yoga v__VERSION__'
           releaseBody: 'Pembaruan otomatis untuk POS Yoga.'
-          releaseDraft: true
+          releaseDraft: false
           prerelease: false
           projectPath: apps/desktop
