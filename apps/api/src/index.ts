@@ -39,11 +39,22 @@ const app = Fastify({
 });
 
 async function start() {
-  // Ensure 'kitchen' role exists in PostgreSQL enum
+  // Ensure 'kitchen' role and 'kitchen_status' enum exist in PostgreSQL
   try {
     await db.execute(sql`ALTER TYPE "public"."role" ADD VALUE IF NOT EXISTS 'kitchen';`);
   } catch (enumErr) {
     // Ignore error if value already exists
+  }
+
+  try {
+    await db.execute(sql`DO $$ BEGIN
+      IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'kitchen_status') THEN
+        CREATE TYPE "public"."kitchen_status" AS ENUM('pending', 'processing', 'completed');
+      END IF;
+    END $$;`);
+    await db.execute(sql`ALTER TABLE "transactions" ADD COLUMN IF NOT EXISTS "kitchen_status" "kitchen_status" DEFAULT 'pending' NOT NULL;`);
+  } catch (colErr) {
+    console.warn('Auto DDL kitchen_status warning:', colErr);
   }
 
   // Run migrations in production

@@ -29,146 +29,155 @@ function generateInvoiceNo(): string {
 export async function transactionRoutes(app: FastifyInstance) {
   // Create transaction (cashier checkout)
   app.post('/api/transactions', { preHandler: [requireAuth] }, async (req, reply) => {
-    const body = req.body as any;
-    const currentUser = (req as any).user;
-    const txId = nanoid();
-    const invoiceNo = generateInvoiceNo();
-    const paymentMethod = body.paymentMethod || 'cash';
+    try {
+      const body = req.body as any;
+      const currentUser = (req as any).user;
+      const txId = nanoid();
+      const invoiceNo = generateInvoiceNo();
+      const paymentMethod = body.paymentMethod || 'cash';
 
-    // Calculate totals
-    let subtotal = 0;
-    const items: any[] = body.items || [];
-    for (const item of items) {
-      subtotal += item.price * item.qty;
-    }
+      // Calculate totals
+      let subtotal = 0;
+      const items: any[] = body.items || [];
+      for (const item of items) {
+        subtotal += item.price * item.qty;
+      }
 
-    const discount = Number(body.discount || 0);
-    const taxRate = Number(body.taxRate || 0);
-    const taxAmount = ((subtotal - discount) * taxRate) / 100;
-    const total = subtotal - discount + taxAmount;
-    const paidAmount = Number(body.paidAmount || 0);
-    const changeAmount = paidAmount - total;
+      const discount = Number(body.discount || 0);
+      const taxRate = Number(body.taxRate || 0);
+      const taxAmount = ((subtotal - discount) * taxRate) / 100;
+      const total = subtotal - discount + taxAmount;
+      const paidAmount = Number(body.paidAmount || 0);
+      const changeAmount = paidAmount - total;
 
-    // Determine status based on payment method
-    const status = paymentMethod === 'qris' ? 'pending' : 'completed';
+      // Determine status based on payment method
+      const status = paymentMethod === 'qris' ? 'pending' : 'completed';
 
-    // Insert transaction
-    await db.insert(transactions).values({
-      id: txId,
-      invoiceNo,
-      userId: currentUser.id,
-      customerId: body.customerId || null,
-      subtotal: String(subtotal),
-      discount: String(discount),
-      tax: String(taxAmount),
-      total: String(total),
-      paidAmount: String(paidAmount),
-      changeAmount: String(changeAmount > 0 ? changeAmount : 0),
-      status,
-      note: body.note || null,
-      paymentMethod,
-    });
-
-    // Insert items
-    for (const item of items) {
-      await db.insert(transactionItems).values({
-        id: nanoid(),
-        transactionId: txId,
-        productId: item.productId,
-        productName: item.productName,
-        variantId: item.variantId || null,
-        variantName: item.variantName || null,
-        qty: item.qty,
-        price: String(item.price),
-        subtotal: String(item.price * item.qty),
+      // Insert transaction
+      await db.insert(transactions).values({
+        id: txId,
+        invoiceNo,
+        userId: currentUser.id,
+        customerId: body.customerId || null,
+        subtotal: String(subtotal),
+        discount: String(discount),
+        tax: String(taxAmount),
+        total: String(total),
+        paidAmount: String(paidAmount),
+        changeAmount: String(changeAmount > 0 ? changeAmount : 0),
+        status,
+        note: body.note || null,
+        paymentMethod,
+        kitchenStatus: 'pending',
       });
 
-      // Deduct stock
-      await db.update(products)
-        .set({ stock: sql`${products.stock} - ${item.qty}` })
-        .where(eq(products.id, item.productId));
-    }
+      // Insert items
+      for (const item of items) {
+        await db.insert(transactionItems).values({
+          id: nanoid(),
+          transactionId: txId,
+          productId: item.productId,
+          productName: item.productName,
+          variantId: item.variantId || null,
+          variantName: item.variantName || null,
+          qty: item.qty,
+          price: String(item.price),
+          subtotal: String(item.price * item.qty),
+        });
 
-    // Insert payment record only for cash
-    if (paymentMethod === 'cash') {
-      await db.insert(payments).values({
-        id: nanoid(),
-        transactionId: txId,
-        method: 'cash',
-        amount: String(paidAmount),
-      });
-    }
+        // Deduct stock
+        await db.update(products)
+          .set({ stock: sql`${products.stock} - ${item.qty}` })
+          .where(eq(products.id, item.productId));
+      }
 
-    // For QRIS: generate Midtrans snap token
-    let snapToken: string | null = null;
-    let snapRedirectUrl: string | null = null;
-
-    if (paymentMethod === 'qris') {
-      try {
-        const midtransOrderId = `QRIS-${txId}`;
-        const parameter = {
-          transaction_details: {
-            order_id: midtransOrderId,
-            gross_amount: Math.round(total),
-          },
-          item_details: items.map((item: any) => ({
-            id: item.productId,
-            name: item.productName,
-            price: Math.round(item.price),
-            quantity: item.qty,
-          })),
-        };
-
-        const midtransTransaction = await snap.createTransaction(parameter);
-        snapToken = midtransTransaction.token;
-        snapRedirectUrl = midtransTransaction.redirect_url;
-
-        // Save snap token and order ID to transaction
-        await db.update(transactions)
-          .set({
-            midtransOrderId,
-            midtransSnapToken: snapToken,
-          })
-          .where(eq(transactions.id, txId));
-      } catch (err: any) {
-        console.error('Midtrans snap token error:', err);
-        // Rollback: delete the transaction since payment setup failed
-        await db.delete(transactionItems).where(eq(transactionItems.transactionId, txId));
-        await db.delete(transactions).where(eq(transactions.id, txId));
-        return reply.status(500).send({
-          success: false,
-          error: 'Failed to create QRIS payment',
-          detail: err.message,
+      // Insert payment record only for cash
+      if (paymentMethod === 'cash') {
+        await db.insert(payments).values({
+          id: nanoid(),
+          transactionId: txId,
+          method: 'cash',
+          amount: String(paidAmount),
         });
       }
+
+      // For QRIS: generate Midtrans snap token
+      let snapToken: string | null = null;
+      let snapRedirectUrl: string | null = null;
+
+      if (paymentMethod === 'qris') {
+        try {
+          const midtransOrderId = `QRIS-${txId}`;
+          const parameter = {
+            transaction_details: {
+              order_id: midtransOrderId,
+              gross_amount: Math.round(total),
+            },
+            item_details: items.map((item: any) => ({
+              id: item.productId,
+              name: item.productName,
+              price: Math.round(item.price),
+              quantity: item.qty,
+            })),
+          };
+
+          const midtransTransaction = await snap.createTransaction(parameter);
+          snapToken = midtransTransaction.token;
+          snapRedirectUrl = midtransTransaction.redirect_url;
+
+          // Save snap token and order ID to transaction
+          await db.update(transactions)
+            .set({
+              midtransOrderId,
+              midtransSnapToken: snapToken,
+            })
+            .where(eq(transactions.id, txId));
+        } catch (err: any) {
+          console.error('Midtrans snap token error:', err);
+          // Rollback: delete the transaction since payment setup failed
+          await db.delete(transactionItems).where(eq(transactionItems.transactionId, txId));
+          await db.delete(transactions).where(eq(transactions.id, txId));
+          return reply.status(500).send({
+            success: false,
+            error: 'Failed to create QRIS payment',
+            detail: err.message,
+          });
+        }
+      }
+
+      await createAuditLog(req, 'transaction.created', `Invoice ${invoiceNo}, Total: ${total}, Method: ${paymentMethod}`);
+
+      // Emit socket event
+      const io = (app as any).io;
+      if (io) {
+        io.emit('order:new', { id: txId, invoiceNo, total, items });
+      }
+
+      const responseData: any = {
+        id: txId,
+        invoiceNo,
+        total,
+        changeAmount: changeAmount > 0 ? changeAmount : 0,
+        paymentMethod,
+      };
+
+      if (paymentMethod === 'qris' && snapToken) {
+        responseData.midtransSnapToken = snapToken;
+        responseData.snapRedirectUrl = snapRedirectUrl;
+      }
+
+      return reply.status(201).send({
+        success: true,
+        data: responseData,
+        message: paymentMethod === 'qris' ? 'Transaction created, awaiting QRIS payment' : 'Transaction completed',
+      });
+    } catch (err: any) {
+      console.error('Transaction creation error:', err);
+      return reply.status(500).send({
+        success: false,
+        error: err.message || 'Gagal memproses transaksi di server',
+      });
     }
-
-    await createAuditLog(req, 'transaction.created', `Invoice ${invoiceNo}, Total: ${total}, Method: ${paymentMethod}`);
-
-    // Emit socket event
-    const io = (app as any).io;
-    if (io) {
-      io.emit('order:new', { id: txId, invoiceNo, total, items });
-    }
-
-    const responseData: any = {
-      id: txId,
-      invoiceNo,
-      total,
-      changeAmount: changeAmount > 0 ? changeAmount : 0,
-      paymentMethod,
-    };
-
-    if (paymentMethod === 'qris' && snapToken) {
-      responseData.midtransSnapToken = snapToken;
-      responseData.snapRedirectUrl = snapRedirectUrl;
-    }
-
-    return reply.status(201).send({
-      success: true,
-      data: responseData,
-      message: paymentMethod === 'qris' ? 'Transaction created, awaiting QRIS payment' : 'Transaction completed',
-    });
   });
 
   // Bulk sync offline transactions
