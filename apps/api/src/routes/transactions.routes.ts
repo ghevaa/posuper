@@ -339,4 +339,30 @@ export async function transactionRoutes(app: FastifyInstance) {
 
     return reply.send({ success: true, data: txList });
   });
+
+  // Today's transactions WITH items — for Kitchen Display
+  app.get('/api/transactions/today-all', { preHandler: [requireAuth] }, async (req, reply) => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    const txList = await db.select().from(transactions)
+      .where(and(
+        gte(transactions.createdAt, today),
+        eq(transactions.status, 'completed'),
+      ))
+      .orderBy(desc(transactions.createdAt));
+
+    // Fetch items for each transaction
+    const txWithItems = await Promise.all(txList.map(async (tx) => {
+      const items = await db.select({
+        id: transactionItems.id,
+        productName: transactionItems.productName,
+        variantName: transactionItems.variantName,
+        qty: transactionItems.qty,
+      }).from(transactionItems).where(eq(transactionItems.transactionId, tx.id));
+      return { ...tx, items };
+    }));
+
+    return reply.send({ success: true, data: txWithItems });
+  });
 }

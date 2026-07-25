@@ -14,7 +14,7 @@ import {
 } from 'drizzle-orm/pg-core';
 
 // --- Enums ---
-export const roleEnum = pgEnum('role', ['developer', 'admin', 'cashier']);
+export const roleEnum = pgEnum('role', ['developer', 'admin', 'cashier', 'kitchen']);
 export const transactionStatusEnum = pgEnum('transaction_status', ['completed', 'voided', 'pending']);
 export const paymentMethodEnum = pgEnum('payment_method', ['cash', 'qris']);
 export const printerTypeEnum = pgEnum('printer_type', ['receipt', 'kitchen']);

@@ -17,10 +17,12 @@ import {
   isBLESupported, isPrinterConnected, connectPrinter,
   printReceipt, printKitchenTicket, type ReceiptData,
 } from '../lib/bluetooth-printer';
+import { generateReceiptText } from '../lib/receipt-text';
 import {
   offlineDB, cacheProducts, cacheCategories, getLocalProducts, getLocalCategories
 } from '../lib/offline-db';
 import { useSyncStore } from '../stores/sync.store';
+import { Capacitor } from '@capacitor/core';
 
 interface ProductVariantData {
   id: string;
@@ -711,7 +713,7 @@ export default function POSPage() {
             </div>
 
             <div className="flex flex-col gap-2">
-              {isBLESupported() ? (
+              {isBLESupported() && !Capacitor.isNativePlatform() ? (
                 <div className="grid grid-cols-2 gap-2">
                   <button
                     onClick={handleBluetoothPrint}
@@ -731,8 +733,34 @@ export default function POSPage() {
                   </button>
                 </div>
               ) : (
-                <button onClick={() => window.print()} className="btn btn-primary w-full">
-                  <Printer size={16} /> Cetak Struk
+                <button
+                  onClick={async () => {
+                    try {
+                      const text = generateReceiptText({
+                        storeName: "D'Mac Chicken Crunch",
+                        invoiceNo: lastTransaction.invoiceNo || '-',
+                        cashierName: user?.name || 'Kasir',
+                        items: (lastTransaction.items || items).map((i: any) => ({
+                          productName: i.productName || i.name,
+                          qty: i.qty,
+                          price: Number(i.price),
+                          variantName: i.variantName,
+                        })),
+                        total: Number(lastTransaction.total),
+                        paidAmount: Number(lastTransaction.paidAmount || lastTransaction.total),
+                        changeAmount: Number(lastTransaction.changeAmount || 0),
+                        paymentMethod: lastTransaction.paymentMethod || 'cash',
+                        date: new Date(),
+                      });
+                      await navigator.clipboard.writeText(text);
+                      toast.success('Struk disalin ke clipboard! Bisa di-paste ke WhatsApp atau aplikasi printer.', { icon: '📋', duration: 3000 });
+                    } catch (err: any) {
+                      toast.error('Gagal menyalin struk');
+                    }
+                  }}
+                  className="btn btn-primary w-full"
+                >
+                  <Printer size={16} /> Salin Struk ke Clipboard
                 </button>
               )}
               <button onClick={() => setShowReceipt(false)} className="btn btn-ghost w-full text-xs">

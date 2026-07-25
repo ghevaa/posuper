@@ -7,7 +7,7 @@ import { useAuthStore } from '../stores/auth.store';
 import {
   LayoutDashboard, ShoppingCart, Package, Tag, Receipt,
   BarChart3, Users, Settings, DollarSign, Clock,
-  Shield, Database, FileText, LogOut, Menu, X, UserCircle, ClipboardList,
+  Shield, Database, FileText, LogOut, Menu, X, UserCircle, ClipboardList, ChefHat,
 } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { useSyncStore } from '../stores/sync.store';
@@ -37,6 +37,10 @@ const developerLinks = [
   { to: '/dev/settings', icon: Settings, label: 'Pengaturan' },
 ];
 
+const kitchenLinks = [
+  { to: '/kitchen', icon: ChefHat, label: 'Pesanan Dapur' },
+];
+
 export default function DashboardLayout() {
   const { user, logout } = useAuthStore();
   const navigate = useNavigate();
@@ -61,6 +65,9 @@ export default function DashboardLayout() {
 
   const links = (() => {
     const sections: { title: string; items: typeof cashierLinks }[] = [];
+    if (user?.role === 'kitchen') {
+      sections.push({ title: 'Dapur', items: kitchenLinks });
+    }
     if (user?.role === 'cashier' || user?.role === 'admin' || user?.role === 'developer') {
       sections.push({ title: 'Kasir', items: cashierLinks });
     }

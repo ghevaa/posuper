@@ -15,12 +15,14 @@ export const ROLES = {
   DEVELOPER: 'developer',
   ADMIN: 'admin',
   CASHIER: 'cashier',
+  KITCHEN: 'kitchen',
 } as const;
 
 export const ROLE_HIERARCHY: Record<string, number> = {
   developer: 3,
   admin: 2,
   cashier: 1,
+  kitchen: 0,
 };
 
 // --- Default Settings Keys ---

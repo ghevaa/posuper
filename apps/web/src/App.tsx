@@ -17,6 +17,7 @@ import AdminExpenses from './pages/AdminExpenses';
 import AdminStockOpname from './pages/AdminStockOpname';
 import AdminUsers from './pages/AdminUsers';
 import DevSettings from './pages/DevSettings';
+import KitchenOrdersPage from './pages/KitchenOrdersPage';
 import { Toaster } from 'react-hot-toast';
 import UpdateChecker from './components/UpdateChecker';
 
@@ -37,6 +38,7 @@ function ProtectedRoute({ children, allowedRoles }: { children: React.ReactNode;
 
   if (allowedRoles && !allowedRoles.includes(user.role)) {
     // Redirect based on role
+    if (user.role === 'kitchen') return <Navigate to="/kitchen" replace />;
     if (user.role === 'cashier') return <Navigate to="/pos" replace />;
     if (user.role === 'admin') return <Navigate to="/admin" replace />;
     return <Navigate to="/dev/settings" replace />;
@@ -71,6 +73,9 @@ export default function App() {
         >
           {/* Default redirect */}
           <Route index element={<Navigate to="/pos" replace />} />
+
+          {/* Kitchen route */}
+          <Route path="kitchen" element={<KitchenOrdersPage />} />
 
           {/* Cashier routes */}
           <Route path="pos" element={<POSPage />} />

@@ -21,6 +21,7 @@ import { midtransRoutes } from './routes/midtrans.routes.js';
 import { stockOpnameRoutes } from './routes/stock-opname.routes.js';
 import { socketPlugin } from './plugins/socket.js';
 import { db } from './db/index.js';
+import { eq } from 'drizzle-orm';
 import multipart from '@fastify/multipart';
 import fastifyStatic from '@fastify/static';
 import path from 'path';
@@ -80,6 +81,25 @@ async function start() {
         },
       });
       console.log('Default admin user created successfully!');
+
+      // 3. Seed default kitchen user
+      console.log('  → Seeding default kitchen user...');
+      try {
+        const kitchenRes = await auth.api.signUpEmail({
+          body: {
+            email: 'dapur@posyoga.com',
+            password: 'dapur123',
+            name: 'Staff Dapur',
+            role: 'kitchen',
+          },
+        });
+        if (kitchenRes.user) {
+          await db.update(schema.user).set({ role: 'kitchen' }).where(eq(schema.user.id, kitchenRes.user.id));
+        }
+      } catch (kErr) {
+        // Ignored if already exists
+      }
+      console.log('Default kitchen user process complete!');
     }
   } catch (seedError) {
     console.error('Failed to auto-seed database:', seedError);

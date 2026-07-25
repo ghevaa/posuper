@@ -51,7 +51,7 @@ export async function authRoutes(app: FastifyInstance) {
       return reply.status(400).send({ success: false, error: 'Nama, email, dan password wajib diisi' });
     }
 
-    const userRole = role && ['developer', 'admin', 'cashier'].includes(role) ? role : 'cashier';
+    const userRole = role && ['developer', 'admin', 'cashier', 'kitchen'].includes(role) ? role : 'cashier';
 
     try {
       const res = await auth.api.signUpEmail({
@@ -79,7 +79,7 @@ export async function authRoutes(app: FastifyInstance) {
     const { id } = req.params as { id: string };
     const { role: newRole } = req.body as { role: string };
 
-    if (!['developer', 'admin', 'cashier'].includes(newRole)) {
+    if (!['developer', 'admin', 'cashier', 'kitchen'].includes(newRole)) {
       return reply.status(400).send({ success: false, error: 'Invalid role' });
     }
 

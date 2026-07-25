@@ -3,7 +3,7 @@
 // ============================================================
 
 // --- Roles ---
-export type Role = 'developer' | 'admin' | 'cashier';
+export type Role = 'developer' | 'admin' | 'cashier' | 'kitchen';
 
 // --- User ---
 export interface User {
