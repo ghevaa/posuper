@@ -21,7 +21,7 @@ import { midtransRoutes } from './routes/midtrans.routes.js';
 import { stockOpnameRoutes } from './routes/stock-opname.routes.js';
 import { socketPlugin } from './plugins/socket.js';
 import { db } from './db/index.js';
-import { eq } from 'drizzle-orm';
+import { eq, sql } from 'drizzle-orm';
 import multipart from '@fastify/multipart';
 import fastifyStatic from '@fastify/static';
 import path from 'path';
@@ -39,6 +39,13 @@ const app = Fastify({
 });
 
 async function start() {
+  // Ensure 'kitchen' role exists in PostgreSQL enum
+  try {
+    await db.execute(sql`ALTER TYPE "public"."role" ADD VALUE IF NOT EXISTS 'kitchen';`);
+  } catch (enumErr) {
+    // Ignore error if value already exists
+  }
+
   // Run migrations in production
   try {
     console.log('Running database migrations...');
