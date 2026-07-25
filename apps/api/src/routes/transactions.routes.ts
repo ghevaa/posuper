@@ -365,4 +365,25 @@ export async function transactionRoutes(app: FastifyInstance) {
 
     return reply.send({ success: true, data: txWithItems });
   });
+
+  // Update kitchen status ('pending' | 'processing' | 'completed')
+  app.patch('/api/transactions/:id/kitchen-status', { preHandler: [requireAuth] }, async (req, reply) => {
+    const { id } = req.params as { id: string };
+    const { kitchenStatus } = req.body as { kitchenStatus: string };
+
+    if (!['pending', 'processing', 'completed'].includes(kitchenStatus)) {
+      return reply.status(400).send({ success: false, error: 'Status dapur tidak valid' });
+    }
+
+    await db.update(transactions)
+      .set({ kitchenStatus: kitchenStatus as any })
+      .where(eq(transactions.id, id));
+
+    const io = (app as any).io;
+    if (io) {
+      io.emit('order:kitchen-status', { id, kitchenStatus });
+    }
+
+    return reply.send({ success: true, message: 'Status pesanan dapur diperbarui', data: { id, kitchenStatus } });
+  });
 }

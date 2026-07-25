@@ -20,6 +20,7 @@ export const paymentMethodEnum = pgEnum('payment_method', ['cash', 'qris']);
 export const printerTypeEnum = pgEnum('printer_type', ['receipt', 'kitchen']);
 export const printerConnectionEnum = pgEnum('printer_connection', ['usb', 'network', 'bluetooth']);
 export const shiftStatusEnum = pgEnum('shift_status', ['open', 'closed']);
+export const kitchenStatusEnum = pgEnum('kitchen_status', ['pending', 'processing', 'completed']);
 
 // --- Better Auth: user ---
 export const user = pgTable('user', {
@@ -161,6 +162,7 @@ export const transactions = pgTable(
     paymentMethod: paymentMethodEnum('payment_method').notNull().default('cash'),
     midtransOrderId: text('midtrans_order_id'),
     midtransSnapToken: text('midtrans_snap_token'),
+    kitchenStatus: kitchenStatusEnum('kitchen_status').notNull().default('pending'),
     createdAt: timestamp('created_at').defaultNow().notNull(),
   },
   (table) => [

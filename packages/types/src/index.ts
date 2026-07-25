@@ -44,6 +44,7 @@ export interface Product {
 
 // --- Transaction ---
 export type TransactionStatus = 'completed' | 'voided' | 'pending';
+export type KitchenStatus = 'pending' | 'processing' | 'completed';
 
 export interface Transaction {
   id: string;
@@ -57,6 +58,7 @@ export interface Transaction {
   paidAmount: number;
   changeAmount: number;
   status: TransactionStatus;
+  kitchenStatus: KitchenStatus;
   note: string | null;
   createdAt: Date;
 }
