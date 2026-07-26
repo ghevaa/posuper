@@ -69,6 +69,22 @@ export default function POSPage() {
   const { items, addItem, removeItem, incrementQty, decrementQty, clearCart, getSubtotal } = useCartStore();
   const { user } = useAuthStore();
 
+  const [optionModalProduct, setOptionModalProduct] = useState<ProductData | null>(null);
+  const [selectedOptions, setSelectedOptions] = useState<Record<string, { id?: string; name: string; price: number }[]>>({});
+
+  const { data: optionGroupsRes } = useQuery({
+    queryKey: ['category-option-groups'],
+    queryFn: async () => {
+      try {
+        const res = await api.get<{ data: any[] }>('/category-option-groups');
+        return res;
+      } catch {
+        return { data: [] };
+      }
+    },
+  });
+  const allOptionGroups = optionGroupsRes?.data || [];
+
   const { data: productsData, isLoading: productsLoading } = useQuery({
     queryKey: ['products'],
     queryFn: async () => {
@@ -281,13 +297,18 @@ export default function POSPage() {
         paymentMethod: isOnlinePayment ? 'qris' : 'cash',
       });
 
+      const txData = {
+        ...res.data,
+        items: res.data.items || items.map(i => ({ productName: i.productName, qty: i.qty, price: i.price, variantName: i.variantName || null })),
+      };
+
       if (isOnlinePayment && res.data.midtransSnapToken) {
         // Try Snap popup first
         if ((window as any).snap) {
           (window as any).snap.pay(res.data.midtransSnapToken, {
             onSuccess: (result: any) => {
               console.log('Midtrans Success:', result);
-              setLastTransaction(res.data);
+              setLastTransaction(txData);
               clearCart();
               setShowPayment(false);
               setShowReceipt(true);
@@ -297,7 +318,7 @@ export default function POSPage() {
             },
             onPending: (result: any) => {
               console.log('Midtrans Pending:', result);
-              setLastTransaction(res.data);
+              setLastTransaction(txData);
               clearCart();
               setShowPayment(false);
               setPaidAmount('');
@@ -316,7 +337,7 @@ export default function POSPage() {
         } else if (res.data.snapRedirectUrl) {
           // Fallback: open payment page in external browser (works in Tauri)
           window.open(res.data.snapRedirectUrl, '_blank');
-          setLastTransaction(res.data);
+          setLastTransaction(txData);
           clearCart();
           setShowPayment(false);
           setPaidAmount('');
@@ -326,7 +347,7 @@ export default function POSPage() {
           toast.error('Gagal memuat halaman pembayaran Midtrans!');
         }
       } else {
-        setLastTransaction(res.data);
+        setLastTransaction(txData);
         clearCart();
         setShowPayment(false);
         setShowReceipt(true);
@@ -347,7 +368,15 @@ export default function POSPage() {
   };
 
   const handleProductClick = (product: ProductData) => {
-    if (product.variants && product.variants.length > 0) {
+    const categoryGroups = allOptionGroups.filter(g => g.categoryId === product.categoryId);
+    if (categoryGroups.length > 0) {
+      setOptionModalProduct(product);
+      const init: Record<string, { id?: string; name: string; price: number }[]> = {};
+      categoryGroups.forEach(g => {
+        init[g.id] = [];
+      });
+      setSelectedOptions(init);
+    } else if (product.variants && product.variants.length > 0) {
       setVariantSelectionProduct(product);
     } else {
       addItem({ id: product.id, name: product.name, price: Number(product.price) });
@@ -831,6 +860,153 @@ export default function POSPage() {
                   </span>
                 </button>
               ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Category Option Groups Modal */}
+      {optionModalProduct && (
+        <div className="modal-overlay" onClick={() => setOptionModalProduct(null)}>
+          <div className="modal-content max-w-md w-full" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-4 pb-2 border-b border-[var(--color-border)]">
+              <div>
+                <h3 className="text-lg font-bold">{optionModalProduct.name}</h3>
+                <p className="text-xs text-[var(--color-primary-400)] font-semibold">
+                  Harga dasar: {formatCurrency(Number(optionModalProduct.price))}
+                </p>
+              </div>
+              <button onClick={() => setOptionModalProduct(null)} className="btn btn-ghost btn-icon"><X size={20} /></button>
+            </div>
+
+            <div className="space-y-4 max-h-[50vh] overflow-y-auto pr-1">
+              {allOptionGroups
+                .filter(g => g.categoryId === optionModalProduct.categoryId)
+                .map(group => {
+                  const currentSelected = selectedOptions[group.id] || [];
+
+                  const toggleOption = (opt: { id?: string; name: string; price: number }) => {
+                    setSelectedOptions(prev => {
+                      const groupSel = prev[group.id] || [];
+                      const exists = groupSel.some(s => s.name === opt.name);
+
+                      if (group.isMultiple) {
+                        if (exists) {
+                          return { ...prev, [group.id]: groupSel.filter(s => s.name !== opt.name) };
+                        } else {
+                          if (group.maxSelect > 0 && groupSel.length >= group.maxSelect) {
+                            toast.error(`Maksimal ${group.maxSelect} pilihan untuk ${group.name}`);
+                            return prev;
+                          }
+                          return { ...prev, [group.id]: [...groupSel, opt] };
+                        }
+                      } else {
+                        if (exists) {
+                          return { ...prev, [group.id]: [] };
+                        } else {
+                          return { ...prev, [group.id]: [opt] };
+                        }
+                      }
+                    });
+                  };
+
+                  return (
+                    <div key={group.id} className="glass-card p-3 space-y-2">
+                      <div className="flex items-center justify-between">
+                        <span className="font-bold text-sm text-white capitalize">{group.name}</span>
+                        <div className="flex gap-1">
+                          {group.isRequired && <span className="badge badge-warning text-[10px]">Wajib</span>}
+                          {group.isMultiple && <span className="badge badge-info text-[10px]">Pilihan Ganda</span>}
+                        </div>
+                      </div>
+
+                      <div className="space-y-1.5 pt-1">
+                        {group.options?.map((opt: any) => {
+                          const isChecked = currentSelected.some(s => s.name === opt.name);
+                          return (
+                            <button
+                              key={opt.id || opt.name}
+                              type="button"
+                              onClick={() => toggleOption({ name: opt.name, price: Number(opt.price) })}
+                              className={`w-full flex items-center justify-between p-2.5 rounded-lg border text-left transition-all ${
+                                isChecked
+                                  ? 'border-[var(--color-primary-500)] bg-[var(--color-primary-500)]/15 text-white'
+                                  : 'border-[var(--color-border)] bg-[var(--color-surface)] text-[var(--color-text-muted)] hover:text-white'
+                              }`}
+                            >
+                              <div className="flex items-center gap-2">
+                                <div className={`w-4 h-4 rounded flex items-center justify-center border ${isChecked ? 'border-[var(--color-primary-500)] bg-[var(--color-primary-500)] text-white' : 'border-gray-500'}`}>
+                                  {isChecked && <CheckCircle2 size={12} />}
+                                </div>
+                                <span className="text-xs font-medium">{opt.name}</span>
+                              </div>
+                              <span className="text-xs font-mono text-emerald-400">+Rp {Number(opt.price).toLocaleString('id-ID')}</span>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  );
+                })}
+            </div>
+
+            {/* Total Preview & Add Button */}
+            <div className="pt-4 mt-4 border-t border-[var(--color-border)] space-y-3">
+              {(() => {
+                const groupsForProduct = allOptionGroups.filter(g => g.categoryId === optionModalProduct.categoryId);
+                const allSelected = Object.values(selectedOptions).flat();
+                const addPrice = allSelected.reduce((sum, item) => sum + item.price, 0);
+                const totalPrice = Number(optionModalProduct.price) + addPrice;
+
+                return (
+                  <>
+                    <div className="flex justify-between items-center text-sm">
+                      <span className="text-[var(--color-text-muted)]">Total Harga Item</span>
+                      <span className="font-bold text-lg text-emerald-400">{formatCurrency(totalPrice)}</span>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        // Validation
+                        for (const group of groupsForProduct) {
+                          const sel = selectedOptions[group.id] || [];
+                          if (group.isRequired && sel.length === 0) {
+                            toast.error(`Wajib memilih opsi pada "${group.name}"`);
+                            return;
+                          }
+                          if (group.minSelect > 0 && sel.length < group.minSelect) {
+                            toast.error(`Pilihan minimum untuk "${group.name}" adalah ${group.minSelect}`);
+                            return;
+                          }
+                        }
+
+                        // Build variant string & add item
+                        const variantNames = allSelected.map(s => `${s.name} (+Rp ${s.price.toLocaleString('id-ID')})`).join(', ');
+
+                        addItem(
+                          {
+                            id: optionModalProduct.id,
+                            name: optionModalProduct.name,
+                            price: Number(optionModalProduct.price)
+                          },
+                          allSelected.length > 0 ? {
+                            id: 'opt_' + Math.random().toString(36).substring(2, 9),
+                            name: variantNames || 'Kustom Opsi',
+                            additionalPrice: addPrice
+                          } : undefined
+                        );
+
+                        toast.success(`${optionModalProduct.name} ditambahkan`, { duration: 1000, icon: '🛒' });
+                        setOptionModalProduct(null);
+                      }}
+                      className="btn btn-primary w-full py-2.5 text-sm font-semibold"
+                    >
+                      Tambah ke Keranjang ({formatCurrency(totalPrice)})
+                    </button>
+                  </>
+                );
+              })()}
             </div>
           </div>
         </div>

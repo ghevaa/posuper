@@ -19,6 +19,7 @@ import { reportRoutes } from './routes/reports.routes.js';
 import { backupRoutes } from './routes/backup.routes.js';
 import { midtransRoutes } from './routes/midtrans.routes.js';
 import { stockOpnameRoutes } from './routes/stock-opname.routes.js';
+import { categoryOptionsRoutes } from './routes/category-options.routes.js';
 import { socketPlugin } from './plugins/socket.js';
 import { db } from './db/index.js';
 import { eq, sql } from 'drizzle-orm';
@@ -53,8 +54,28 @@ async function start() {
       END IF;
     END $$;`);
     await db.execute(sql`ALTER TABLE "transactions" ADD COLUMN IF NOT EXISTS "kitchen_status" "kitchen_status" DEFAULT 'pending' NOT NULL;`);
+
+    await db.execute(sql`
+      CREATE TABLE IF NOT EXISTS "category_option_groups" (
+        "id" text PRIMARY KEY NOT NULL,
+        "name" text NOT NULL,
+        "category_id" text NOT NULL REFERENCES "categories"("id") ON DELETE CASCADE,
+        "is_required" boolean DEFAULT false NOT NULL,
+        "is_multiple" boolean DEFAULT false NOT NULL,
+        "min_select" integer DEFAULT 0 NOT NULL,
+        "max_select" integer DEFAULT 1 NOT NULL,
+        "created_at" timestamp DEFAULT now() NOT NULL
+      );
+      CREATE TABLE IF NOT EXISTS "category_options" (
+        "id" text PRIMARY KEY NOT NULL,
+        "group_id" text NOT NULL REFERENCES "category_option_groups"("id") ON DELETE CASCADE,
+        "name" text NOT NULL,
+        "price" numeric(12, 2) DEFAULT '0' NOT NULL,
+        "created_at" timestamp DEFAULT now() NOT NULL
+      );
+    `);
   } catch (colErr) {
-    console.warn('Auto DDL kitchen_status warning:', colErr);
+    console.warn('Auto DDL warning:', colErr);
   }
 
   // Run migrations in production
@@ -200,6 +221,7 @@ async function start() {
   await app.register(backupRoutes);
   await app.register(stockOpnameRoutes);
   await app.register(midtransRoutes);
+  await app.register(categoryOptionsRoutes);
 
   // Socket.IO
   await app.register(socketPlugin);

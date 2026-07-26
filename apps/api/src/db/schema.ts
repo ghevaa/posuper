@@ -133,6 +133,39 @@ export const productVariants = pgTable(
   ],
 );
 
+// --- Category Option Groups (Grup Varian / Opsi Kategori) ---
+export const categoryOptionGroups = pgTable(
+  'category_option_groups',
+  {
+    id: text('id').primaryKey(),
+    name: text('name').notNull(), // e.g. "extra saus"
+    categoryId: text('category_id').notNull().references(() => categories.id, { onDelete: 'cascade' }),
+    isRequired: boolean('is_required').notNull().default(false), // "Wajib dipilih"
+    isMultiple: boolean('is_multiple').notNull().default(false), // "Pilihan Ganda"
+    minSelect: integer('min_select').notNull().default(0),
+    maxSelect: integer('max_select').notNull().default(1),
+    createdAt: timestamp('created_at').defaultNow().notNull(),
+  },
+  (table) => [
+    index('category_option_groups_categoryId_idx').on(table.categoryId),
+  ],
+);
+
+// --- Category Options (Pilihan Opsi) ---
+export const categoryOptions = pgTable(
+  'category_options',
+  {
+    id: text('id').primaryKey(),
+    groupId: text('group_id').notNull().references(() => categoryOptionGroups.id, { onDelete: 'cascade' }),
+    name: text('name').notNull(), // e.g. "extra bbq spicy"
+    price: numeric('price', { precision: 12, scale: 2 }).notNull().default('0'), // e.g. 3000
+    createdAt: timestamp('created_at').defaultNow().notNull(),
+  },
+  (table) => [
+    index('category_options_groupId_idx').on(table.groupId),
+  ],
+);
+
 // --- Customers ---
 export const customers = pgTable('customers', {
   id: text('id').primaryKey(),

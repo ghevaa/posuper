@@ -19,6 +19,8 @@ import {
   productVariants,
   stockOpnameSessions,
   stockOpnameItems,
+  categoryOptionGroups,
+  categoryOptions,
 } from './schema.js';
 
 // --- User Relations ---
@@ -51,6 +53,16 @@ export const accountRelations = relations(account, ({ one }) => ({
 // --- Category Relations ---
 export const categoryRelations = relations(categories, ({ many }) => ({
   products: many(products),
+  optionGroups: many(categoryOptionGroups),
+}));
+
+export const categoryOptionGroupRelations = relations(categoryOptionGroups, ({ one, many }) => ({
+  category: one(categories, { fields: [categoryOptionGroups.categoryId], references: [categories.id] }),
+  options: many(categoryOptions),
+}));
+
+export const categoryOptionRelations = relations(categoryOptions, ({ one }) => ({
+  group: one(categoryOptionGroups, { fields: [categoryOptions.groupId], references: [categoryOptionGroups.id] }),
 }));
 
 // --- Product Relations ---

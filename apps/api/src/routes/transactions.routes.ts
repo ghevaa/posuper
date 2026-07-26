@@ -157,8 +157,10 @@ export async function transactionRoutes(app: FastifyInstance) {
         id: txId,
         invoiceNo,
         total,
+        paidAmount,
         changeAmount: changeAmount > 0 ? changeAmount : 0,
         paymentMethod,
+        items: items.map(i => ({ productName: i.productName, qty: i.qty, price: i.price, variantName: i.variantName || null })),
       };
 
       if (paymentMethod === 'qris' && snapToken) {
