@@ -56,7 +56,7 @@ export const useCartStore = create<CartState>((set, get) => ({
           {
             cartItemId,
             productId: product.id,
-            productName: variantName ? `${product.name} (${variantName})` : product.name,
+            productName: product.name,
             price: finalPrice,
             qty: 1,
             subtotal: finalPrice,

@@ -371,6 +371,19 @@ export default function POSPage() {
   };
 
   const handleProductClick = (product: ProductData) => {
+    // Stock check
+    if (Number(product.stock) <= 0) {
+      toast.error(`Stok "${product.name}" habis!`, { icon: '⚠️' });
+      return;
+    }
+
+    // Check if already in cart and would exceed stock
+    const existingInCart = items.filter(i => i.productId === product.id).reduce((sum, i) => sum + i.qty, 0);
+    if (existingInCart >= Number(product.stock)) {
+      toast.error(`Stok "${product.name}" tidak cukup. Sisa: ${Number(product.stock) - existingInCart + items.find(i => i.productId === product.id)!?.qty || 0}`, { icon: '⚠️' });
+      return;
+    }
+
     const categoryGroups = allOptionGroups.filter(g => g.categoryId === product.categoryId);
     if (categoryGroups.length > 0) {
       setOptionModalProduct(product);
@@ -432,17 +445,25 @@ export default function POSPage() {
             <div className="flex items-center justify-center h-40"><div className="spinner" /></div>
           ) : (
             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-3 lg:grid-cols-4 gap-2.5 sm:gap-3">
-              {filteredProducts.map((product) => (
+              {filteredProducts.map((product) => {
+                const isOutOfStock = Number(product.stock) <= 0;
+                return (
                 <button
                   key={product.id}
                   onClick={() => handleProductClick(product)}
-                  className="glass-card p-3 sm:p-4 text-left hover:border-[var(--color-primary-500)] transition-colors group flex flex-col justify-between h-full"
+                  disabled={isOutOfStock}
+                  className={`glass-card p-3 sm:p-4 text-left transition-colors group flex flex-col justify-between h-full ${isOutOfStock ? 'opacity-50 cursor-not-allowed' : 'hover:border-[var(--color-primary-500)]'}`}
                 >
                   <div>
-                    <div className="w-full h-20 sm:h-24 rounded-lg bg-[var(--color-surface)] mb-2 flex items-center justify-center text-3xl group-hover:scale-105 transition-transform overflow-hidden">
+                    <div className="w-full h-20 sm:h-24 rounded-lg bg-[var(--color-surface)] mb-2 flex items-center justify-center text-3xl group-hover:scale-105 transition-transform overflow-hidden relative">
                       {product.image ? (
                         <img src={getProductImageUrl(product.image)} alt={product.name} className="w-full h-full object-cover rounded-lg" />
                       ) : '📦'}
+                      {isOutOfStock && (
+                        <div className="absolute inset-0 bg-black/60 flex items-center justify-center rounded-lg">
+                          <span className="text-red-400 font-bold text-xs">HABIS</span>
+                        </div>
+                      )}
                     </div>
                     <p className="font-medium text-xs sm:text-sm line-clamp-2 leading-tight">{product.name}</p>
                   </div>
@@ -450,10 +471,10 @@ export default function POSPage() {
                     <p className="text-[var(--color-primary-400)] font-semibold text-xs sm:text-sm">
                       {formatCurrency(Number(product.price))}
                     </p>
-                    <p className="text-[10px] sm:text-[11px] text-[var(--color-text-dim)]">Stok: {product.stock}</p>
+                    <p className={`text-[10px] sm:text-[11px] ${isOutOfStock ? 'text-red-400 font-semibold' : 'text-[var(--color-text-dim)]'}`}>Stok: {product.stock}</p>
                   </div>
                 </button>
-              ))}
+              )})}
             </div>
           )}
         </div>
@@ -479,7 +500,7 @@ export default function POSPage() {
             items.map((item) => (
               <div key={item.cartItemId} className="flex items-center gap-3 p-3 rounded-lg bg-[var(--color-surface)] border border-[var(--color-border)]">
                 <div className="flex-1 min-w-0">
-                  <p className="font-medium text-sm truncate">{item.productName}</p>
+                  <p className="font-medium text-sm truncate">{item.productName}{item.variantName ? ` (${item.variantName})` : ''}</p>
                   <p className="text-[var(--color-primary-400)] text-xs">{formatCurrency(item.price)}</p>
                 </div>
                 <div className="flex items-center gap-1.5">
@@ -587,7 +608,7 @@ export default function POSPage() {
                 items.map((item) => (
                   <div key={item.cartItemId} className="flex items-center gap-2 p-2.5 rounded-lg bg-[var(--color-surface)] border border-[var(--color-border)]">
                     <div className="flex-1 min-w-0">
-                      <p className="font-medium text-xs truncate">{item.productName}</p>
+                      <p className="font-medium text-xs truncate">{item.productName}{item.variantName ? ` (${item.variantName})` : ''}</p>
                       <p className="text-[var(--color-primary-400)] text-[11px]">{formatCurrency(item.price)}</p>
                     </div>
                     <div className="flex items-center gap-1">

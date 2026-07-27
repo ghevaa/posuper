@@ -71,7 +71,21 @@ export async function transactionRoutes(app: FastifyInstance) {
         kitchenStatus: 'pending',
       });
 
-      // Insert items
+      // --- Stock Validation ---
+      for (const item of items) {
+        const [product] = await db.select({ stock: products.stock, name: products.name })
+          .from(products)
+          .where(eq(products.id, item.productId))
+          .limit(1);
+
+        if (product && Number(product.stock) < item.qty) {
+          return reply.status(400).send({
+            error: `Stok "${product.name}" tidak cukup. Sisa stok: ${product.stock}, diminta: ${item.qty}`,
+          });
+        }
+      }
+
+      // Insert items & deduct stock
       for (const item of items) {
         await db.insert(transactionItems).values({
           id: nanoid(),
