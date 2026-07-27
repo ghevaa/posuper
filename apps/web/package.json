@@ -9,6 +9,7 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@capacitor-community/bluetooth-le": "^8.2.0",
     "@capacitor/network": "^8.0.1",
     "@pos-yoga/config": "*",
     "@pos-yoga/types": "*",
