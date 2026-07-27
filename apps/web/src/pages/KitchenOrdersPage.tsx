@@ -14,6 +14,7 @@ import toast from 'react-hot-toast';
 import {
   isBLESupported, printKitchenTicket,
 } from '../lib/bluetooth-printer';
+import { nativePrintKitchenTicket } from '../lib/native-ble-printer';
 import { generateKitchenTicketText } from '../lib/receipt-text';
 import { Capacitor } from '@capacitor/core';
 
@@ -91,7 +92,23 @@ export default function KitchenOrdersPage() {
       const IS_CAPACITOR = Capacitor.isNativePlatform();
       const hasBLE = isBLESupported();
 
-      if (hasBLE && !IS_CAPACITOR) {
+      if (IS_CAPACITOR) {
+        // Native BLE printing on Android
+        await nativePrintKitchenTicket({
+          invoiceNo: order.invoiceNo,
+          cashierName: '',
+          items: order.items.map(i => ({
+            name: i.productName,
+            qty: i.qty,
+            price: 0,
+            variantName: i.variantName,
+          })),
+          date: new Date(order.createdAt),
+          paperSize: '58mm',
+        });
+        toast.success('Nota dapur berhasil dicetak via Bluetooth!', { icon: '🖨️' });
+      } else if (hasBLE) {
+        // Web Bluetooth on Desktop Chrome
         await printKitchenTicket({
           invoiceNo: order.invoiceNo,
           cashierName: '',
@@ -106,30 +123,14 @@ export default function KitchenOrdersPage() {
         });
         toast.success('Nota dapur berhasil dicetak!');
       } else {
+        // Fallback: clipboard
         const text = generateKitchenTicketText({
           invoiceNo: order.invoiceNo,
           items: order.items,
           date: new Date(order.createdAt),
         });
-
-        // Try Web Share API (opens RawBT or Bluetooth Printer app on Android!)
-        if (navigator.share) {
-          try {
-            await navigator.share({
-              title: `Nota Dapur ${order.invoiceNo}`,
-              text: text,
-            });
-            toast.success('Nota dikirim ke printer/app!', { icon: '🖨️' });
-          } catch (e: any) {
-            if (e.name !== 'AbortError') {
-              await navigator.clipboard.writeText(text);
-              toast.success('Nota disalin ke clipboard!', { icon: '📋' });
-            }
-          }
-        } else {
-          await navigator.clipboard.writeText(text);
-          toast.success('Nota disalin ke clipboard!', { icon: '📋' });
-        }
+        await navigator.clipboard.writeText(text);
+        toast.success('Nota disalin ke clipboard!', { icon: '📋' });
       }
     } catch (err: any) {
       console.error('Print error:', err);
