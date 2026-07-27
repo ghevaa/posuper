@@ -15,7 +15,8 @@ import {
   printReceipt, printKitchenTicket, type ReceiptData,
 } from '../lib/bluetooth-printer';
 import {
-  isNativePrinterConnected, connectNativePrinter,
+  isNativePrinterConnected, connectNativePrinter, ensureNativePrinterConnected,
+  getSavedPrinterName, forgetSavedPrinter,
   nativePrintReceipt, nativePrintKitchenTicket,
   type ReceiptData as NativeReceiptData,
 } from '../lib/native-ble-printer';
@@ -745,71 +746,91 @@ export default function POSPage() {
             <div className="flex flex-col gap-2">
               {Capacitor.isNativePlatform() ? (
                 /* --- MOBILE (Capacitor) — Native BLE Printing --- */
-                <div className="grid grid-cols-2 gap-2">
-                  <button
-                    onClick={async () => {
-                      setPrinting(true);
-                      try {
-                        await nativePrintReceipt({
-                          storeName: "D'Mac Chicken Crunch",
-                          invoiceNo: lastTransaction.invoiceNo || '-',
-                          cashierName: user?.name || 'Kasir',
-                          items: (lastTransaction.items || items).map((i: any) => ({
-                            name: i.productName || i.name,
-                            qty: i.qty,
-                            price: Number(i.price),
-                            variantName: i.variantName,
-                          })),
-                          subtotal: Number(lastTransaction.total),
-                          total: Number(lastTransaction.total),
-                          paidAmount: Number(lastTransaction.paidAmount || lastTransaction.total),
-                          changeAmount: Number(lastTransaction.changeAmount || 0),
-                          paymentMethod: lastTransaction.paymentMethod || 'cash',
-                          date: new Date(),
-                          paperSize: '80mm',
-                        });
-                        toast.success('Struk Kasir berhasil dicetak via Bluetooth!', { icon: '🖨️' });
-                      } catch (err: any) {
-                        console.error('Native BLE print error:', err);
-                        toast.error(err.message || 'Gagal mencetak. Pastikan printer Bluetooth menyala.');
-                      } finally {
-                        setPrinting(false);
-                      }
-                    }}
-                    disabled={printing}
-                    className="btn btn-primary text-xs py-2.5"
-                  >
-                    {printing ? <Loader2 size={14} className="animate-spin" /> : <><Bluetooth size={14} /> Struk 80mm</>}
-                  </button>
-                  <button
-                    onClick={async () => {
-                      setPrinting(true);
-                      try {
-                        await nativePrintKitchenTicket({
-                          invoiceNo: lastTransaction.invoiceNo || '-',
-                          cashierName: user?.name || 'Kasir',
-                          items: (lastTransaction.items || items).map((i: any) => ({
-                            name: i.productName || i.name,
-                            qty: i.qty,
-                            price: Number(i.price),
-                            variantName: i.variantName,
-                          })),
-                          date: new Date(),
-                          paperSize: '58mm',
-                        });
-                        toast.success('Nota Dapur berhasil dicetak via Bluetooth!', { icon: '🖨️' });
-                      } catch (err: any) {
-                        console.error('Native BLE kitchen print error:', err);
-                        toast.error(err.message || 'Gagal mencetak. Pastikan printer Bluetooth menyala.');
-                      } finally {
-                        setPrinting(false);
-                      }
-                    }}
-                    disabled={printing}
-                    className="btn btn-secondary text-xs py-2.5 border border-[var(--color-primary-500)]/40"
-                  >
-                    {printing ? <Loader2 size={14} className="animate-spin" /> : <><Bluetooth size={14} /> Dapur 58mm</>}
-                  </button>
+                <div className="space-y-2">
+                  <div className="grid grid-cols-2 gap-2">
+                    <button
+                      onClick={async () => {
+                        setPrinting(true);
+                        try {
+                          await nativePrintReceipt({
+                            storeName: "D'Mac Chicken Crunch",
+                            invoiceNo: lastTransaction.invoiceNo || '-',
+                            cashierName: user?.name || 'Kasir',
+                            items: (lastTransaction.items || items).map((i: any) => ({
+                              name: i.productName || i.name,
+                              qty: i.qty,
+                              price: Number(i.price),
+                              variantName: i.variantName,
+                            })),
+                            subtotal: Number(lastTransaction.total),
+                            total: Number(lastTransaction.total),
+                            paidAmount: Number(lastTransaction.paidAmount || lastTransaction.total),
+                            changeAmount: Number(lastTransaction.changeAmount || 0),
+                            paymentMethod: lastTransaction.paymentMethod || 'cash',
+                            date: new Date(),
+                            paperSize: '80mm',
+                          });
+                          toast.success('Struk Kasir berhasil dicetak!', { icon: '🖨️' });
+                        } catch (err: any) {
+                          console.error('Native BLE print error:', err);
+                          toast.error(err.message || 'Gagal mencetak. Pastikan printer Bluetooth menyala.');
+                        } finally {
+                          setPrinting(false);
+                        }
+                      }}
+                      disabled={printing}
+                      className="btn btn-primary text-xs py-2.5"
+                    >
+                      {printing ? <Loader2 size={14} className="animate-spin" /> : <><Bluetooth size={14} /> Struk 80mm</>}
+                    </button>
+                    <button
+                      onClick={async () => {
+                        setPrinting(true);
+                        try {
+                          await nativePrintKitchenTicket({
+                            invoiceNo: lastTransaction.invoiceNo || '-',
+                            cashierName: user?.name || 'Kasir',
+                            items: (lastTransaction.items || items).map((i: any) => ({
+                              name: i.productName || i.name,
+                              qty: i.qty,
+                              price: Number(i.price),
+                              variantName: i.variantName,
+                            })),
+                            date: new Date(),
+                            paperSize: '58mm',
+                          });
+                          toast.success('Nota Dapur berhasil dicetak!', { icon: '🖨️' });
+                        } catch (err: any) {
+                          console.error('Native BLE kitchen print error:', err);
+                          toast.error(err.message || 'Gagal mencetak. Pastikan printer Bluetooth menyala.');
+                        } finally {
+                          setPrinting(false);
+                        }
+                      }}
+                      disabled={printing}
+                      className="btn btn-secondary text-xs py-2.5 border border-[var(--color-primary-500)]/40"
+                    >
+                      {printing ? <Loader2 size={14} className="animate-spin" /> : <><Bluetooth size={14} /> Dapur 58mm</>}
+                    </button>
+                  </div>
+
+                  <div className="flex items-center justify-between text-[11px] text-[var(--color-text-dim)] pt-1 px-1">
+                    <span className="truncate max-w-[190px]">Printer: <strong className="text-white">{getSavedPrinterName() || 'Belum dipilih'}</strong></span>
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        try {
+                          const name = await ensureNativePrinterConnected(true);
+                          toast.success(`Terhubung ke ${name}`, { icon: '🖨️' });
+                        } catch (e: any) {
+                          toast.error(e.message || 'Batal memilih printer');
+                        }
+                      }}
+                      className="text-cyan-400 hover:underline font-medium shrink-0"
+                    >
+                      Pilih / Ganti Printer
+                    </button>
+                  </div>
                 </div>
               ) : isBLESupported() ? (
                 /* --- DESKTOP (Chrome Web Bluetooth) --- */

@@ -1,7 +1,7 @@
 // ============================================================
 // POS Yoga — Native Bluetooth Printer (Capacitor BLE)
 // Uses @capacitor-community/bluetooth-le for REAL Bluetooth
-// printing on Android (inside Capacitor WebView)
+// printing on Android with Auto-Reconnect (no re-scan needed!)
 // ============================================================
 
 import { BleClient, numbersToDataView } from '@capacitor-community/bluetooth-le';
@@ -34,6 +34,9 @@ const KNOWN_SERVICE_UUIDS = [
   'e7810a71-73ae-499d-8c15-faa9aef0c3f2',
 ];
 
+const SAVED_DEVICE_KEY = 'pos_saved_printer_id';
+const SAVED_DEVICE_NAME = 'pos_saved_printer_name';
+
 // State
 let connectedDeviceId: string | null = null;
 let writeServiceUuid: string | null = null;
@@ -54,19 +57,88 @@ async function ensureInitialized(): Promise<void> {
   }
 }
 
-// --- Scan & Connect ---
-export async function connectNativePrinter(): Promise<string> {
+export function getSavedPrinterName(): string | null {
+  return localStorage.getItem(SAVED_DEVICE_NAME);
+}
+
+export function isNativePrinterConnected(): boolean {
+  return !!connectedDeviceId && !!writeServiceUuid && !!writeCharUuid;
+}
+
+// Connect directly to a specific deviceId (silent auto-reconnect)
+async function connectToDeviceId(deviceId: string, name?: string): Promise<boolean> {
   await ensureInitialized();
 
-  // Disconnect previous if any
+  try {
+    await BleClient.connect(deviceId, (disconnectedId) => {
+      console.log(`Printer disconnected: ${disconnectedId}`);
+      if (connectedDeviceId === disconnectedId) {
+        connectedDeviceId = null;
+        writeServiceUuid = null;
+        writeCharUuid = null;
+      }
+    });
+
+    const services = await BleClient.getServices(deviceId);
+    let foundService: string | null = null;
+    let foundChar: string | null = null;
+
+    for (const service of services) {
+      for (const char of service.characteristics) {
+        if (char.properties.write || char.properties.writeWithoutResponse) {
+          foundService = service.uuid;
+          foundChar = char.uuid;
+          break;
+        }
+      }
+      if (foundChar) break;
+    }
+
+    if (!foundService || !foundChar) {
+      await BleClient.disconnect(deviceId);
+      return false;
+    }
+
+    connectedDeviceId = deviceId;
+    writeServiceUuid = foundService;
+    writeCharUuid = foundChar;
+    if (name) localStorage.setItem(SAVED_DEVICE_NAME, name);
+    localStorage.setItem(SAVED_DEVICE_KEY, deviceId);
+    return true;
+  } catch (err) {
+    console.warn('Auto-reconnect to saved printer failed:', err);
+    return false;
+  }
+}
+
+export async function connectNativePrinter(): Promise<string> {
+  return ensureNativePrinterConnected(true);
+}
+
+// Ensure connection (uses saved printer if available, otherwise prompts picker)
+export async function ensureNativePrinterConnected(forcePicker = false): Promise<string> {
+  if (!forcePicker && isNativePrinterConnected()) {
+    return localStorage.getItem(SAVED_DEVICE_NAME) || connectedDeviceId || 'Printer';
+  }
+
+  const savedId = localStorage.getItem(SAVED_DEVICE_KEY);
+  const savedName = localStorage.getItem(SAVED_DEVICE_NAME);
+
+  if (!forcePicker && savedId) {
+    const success = await connectToDeviceId(savedId, savedName || undefined);
+    if (success) {
+      return savedName || savedId;
+    }
+  }
+
+  // If no saved device OR direct connect failed OR forcePicker is true: prompt picker!
+  await ensureInitialized();
+
   if (connectedDeviceId) {
-    try {
-      await BleClient.disconnect(connectedDeviceId);
-    } catch {}
+    try { await BleClient.disconnect(connectedDeviceId); } catch {}
     connectedDeviceId = null;
   }
 
-  // Request device - shows native Android BLE picker
   const device = await BleClient.requestDevice({
     optionalServices: KNOWN_SERVICE_UUIDS,
   });
@@ -75,53 +147,13 @@ export async function connectNativePrinter(): Promise<string> {
     throw new Error('Tidak ada printer yang dipilih');
   }
 
-  // Connect
-  await BleClient.connect(device.deviceId, (deviceId) => {
-    console.log(`Printer disconnected: ${deviceId}`);
-    if (connectedDeviceId === deviceId) {
-      connectedDeviceId = null;
-      writeServiceUuid = null;
-      writeCharUuid = null;
-    }
-  });
-
-  // Discover services & find writable characteristic
-  const services = await BleClient.getServices(device.deviceId);
-
-  let foundService: string | null = null;
-  let foundChar: string | null = null;
-
-  for (const service of services) {
-    for (const char of service.characteristics) {
-      if (
-        char.properties.write ||
-        char.properties.writeWithoutResponse
-      ) {
-        foundService = service.uuid;
-        foundChar = char.uuid;
-        break;
-      }
-    }
-    if (foundChar) break;
+  const printerName = device.name || device.deviceId;
+  const success = await connectToDeviceId(device.deviceId, printerName);
+  if (!success) {
+    throw new Error('Tidak dapat terhubung atau tidak ditemukan karakteristik tulis pada printer');
   }
 
-  if (!foundService || !foundChar) {
-    await BleClient.disconnect(device.deviceId);
-    throw new Error('Tidak ditemukan karakteristik tulis pada printer. Pastikan printer menyala dan mendukung BLE.');
-  }
-
-  connectedDeviceId = device.deviceId;
-  writeServiceUuid = foundService;
-  writeCharUuid = foundChar;
-
-  console.log(`Native BLE Printer connected: ${device.name || device.deviceId}`);
-  console.log(`  Service: ${writeServiceUuid}, Char: ${writeCharUuid}`);
-
-  return device.name || device.deviceId;
-}
-
-export function isNativePrinterConnected(): boolean {
-  return !!connectedDeviceId && !!writeServiceUuid && !!writeCharUuid;
+  return printerName;
 }
 
 export async function disconnectNativePrinter(): Promise<void> {
@@ -133,6 +165,12 @@ export async function disconnectNativePrinter(): Promise<void> {
   connectedDeviceId = null;
   writeServiceUuid = null;
   writeCharUuid = null;
+}
+
+export function forgetSavedPrinter(): void {
+  disconnectNativePrinter();
+  localStorage.removeItem(SAVED_DEVICE_KEY);
+  localStorage.removeItem(SAVED_DEVICE_NAME);
 }
 
 // --- Send data (chunked) ---
@@ -150,7 +188,6 @@ async function sendData(data: number[]): Promise<void> {
       writeCharUuid,
       numbersToDataView(chunk),
     );
-    // Small delay between chunks
     await new Promise((r) => setTimeout(r, 30));
   }
 }
@@ -160,7 +197,7 @@ function formatCurrency(amount: number): string {
   return 'Rp ' + amount.toLocaleString('id-ID');
 }
 
-// --- Receipt Data Types (shared with bluetooth-printer.ts) ---
+// --- Receipt Data Types ---
 export interface ReceiptItem {
   name: string;
   qty: number;
@@ -192,9 +229,7 @@ export interface KitchenTicketData {
 
 // --- Print Receipt ---
 export async function nativePrintReceipt(receipt: ReceiptData): Promise<void> {
-  if (!isNativePrinterConnected()) {
-    await connectNativePrinter();
-  }
+  await ensureNativePrinterConnected();
 
   const paperWidth = receipt.paperSize === '58mm' ? 32 : 48;
 
@@ -205,7 +240,6 @@ export async function nativePrintReceipt(receipt: ReceiptData): Promise<void> {
   const dashLine = (): string => '-'.repeat(paperWidth);
 
   const data: number[] = [];
-
   const addCmd = (cmd: number[]) => data.push(...cmd);
   const addLine = (text: string) => data.push(...encode(text + '\n'));
 
@@ -281,9 +315,7 @@ export async function nativePrintReceipt(receipt: ReceiptData): Promise<void> {
 
 // --- Print Kitchen Ticket ---
 export async function nativePrintKitchenTicket(ticket: KitchenTicketData): Promise<void> {
-  if (!isNativePrinterConnected()) {
-    await connectNativePrinter();
-  }
+  await ensureNativePrinterConnected();
 
   const paperWidth = ticket.paperSize === '80mm' ? 48 : 32;
   const dashLine = (): string => '-'.repeat(paperWidth);
@@ -324,9 +356,7 @@ export async function nativePrintKitchenTicket(ticket: KitchenTicketData): Promi
 
 // --- Test Print ---
 export async function nativeTestPrint(): Promise<void> {
-  if (!isNativePrinterConnected()) {
-    await connectNativePrinter();
-  }
+  await ensureNativePrinterConnected();
 
   const data: number[] = [];
   data.push(...CMD.INIT);
