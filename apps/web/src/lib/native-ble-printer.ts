@@ -269,9 +269,8 @@ export async function nativePrintReceipt(receipt: ReceiptData): Promise<void> {
 
   // Items
   for (const item of receipt.items) {
-    const itemName = item.variantName
-      ? `${item.name} (${item.variantName})`
-      : item.name;
+    const hasVariant = item.variantName && !item.name.toLowerCase().includes(`(${item.variantName.toLowerCase()})`);
+    const itemName = hasVariant ? `${item.name} (${item.variantName})` : item.name;
 
     const displayName = itemName.length > paperWidth - 2
       ? itemName.substring(0, paperWidth - 5) + '...'
@@ -342,7 +341,8 @@ export async function nativePrintKitchenTicket(ticket: KitchenTicketData): Promi
   addCmd(CMD.BOLD_ON);
   for (const item of ticket.items) {
     const qtyText = `[ ${item.qty}x ] `;
-    const itemName = item.variantName ? `${item.name} (${item.variantName})` : item.name;
+    const hasVariant = item.variantName && !item.name.toLowerCase().includes(`(${item.variantName.toLowerCase()})`);
+    const itemName = hasVariant ? `${item.name} (${item.variantName})` : item.name;
     addLine(qtyText + itemName);
   }
   addCmd(CMD.BOLD_OFF);

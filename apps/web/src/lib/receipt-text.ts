@@ -59,7 +59,8 @@ export function generateReceiptText(data: ReceiptTextData): string {
 
   for (const item of data.items) {
     const name = item.productName || item.name || '';
-    const itemName = item.variantName ? `${name} (${item.variantName})` : name;
+    const hasVariant = item.variantName && !name.toLowerCase().includes(`(${item.variantName.toLowerCase()})`);
+    const itemName = hasVariant ? `${name} (${item.variantName})` : name;
     lines.push(itemName);
     const qtyPrice = `  ${item.qty}x ${formatCurrency(item.price || 0)}`;
     const lineTotal = formatCurrency(item.qty * (item.price || 0));
@@ -101,7 +102,9 @@ export function generateKitchenTicketText(data: KitchenTicketTextData): string {
   lines.push('--------------------------------');
 
   for (const item of data.items) {
-    const itemName = item.variantName ? `${item.productName} (${item.variantName})` : item.productName;
+    const name = item.productName || '';
+    const hasVariant = item.variantName && !name.toLowerCase().includes(`(${item.variantName.toLowerCase()})`);
+    const itemName = hasVariant ? `${name} (${item.variantName})` : name;
     lines.push(`[ ${item.qty}x ] ${itemName}`);
   }
 

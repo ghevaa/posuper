@@ -270,7 +270,7 @@ export default function KitchenOrdersPage() {
                         </span>
                         <span className="text-sm font-medium">
                           {item.productName}
-                          {item.variantName && (
+                          {item.variantName && !item.productName.toLowerCase().includes(`(${item.variantName.toLowerCase()})`) && (
                             <span className="text-[var(--color-text-dim)] text-xs ml-1">({item.variantName})</span>
                           )}
                         </span>
