@@ -74,8 +74,15 @@ export default function App() {
           {/* Default redirect */}
           <Route index element={<Navigate to="/pos" replace />} />
 
-          {/* Kitchen route */}
-          <Route path="kitchen" element={<KitchenOrdersPage />} />
+          {/* Kitchen route - Restricted to Kitchen role only */}
+          <Route
+            path="kitchen"
+            element={
+              <ProtectedRoute allowedRoles={['kitchen', 'developer']}>
+                <KitchenOrdersPage />
+              </ProtectedRoute>
+            }
+          />
 
           {/* Cashier routes */}
           <Route path="pos" element={<POSPage />} />
