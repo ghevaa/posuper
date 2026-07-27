@@ -12,6 +12,7 @@ import {
 import toast from 'react-hot-toast';
 import {
   isBLESupported, isPrinterConnected, connectPrinter,
+  ensureDesktopPrinterConnected, getSavedDesktopPrinterName,
   printReceipt, printKitchenTicket, type ReceiptData,
 } from '../lib/bluetooth-printer';
 import {
@@ -834,23 +835,43 @@ export default function POSPage() {
                 </div>
               ) : isBLESupported() ? (
                 /* --- DESKTOP (Chrome Web Bluetooth) --- */
-                <div className="grid grid-cols-2 gap-2">
-                  <button
-                    onClick={handleBluetoothPrint}
-                    disabled={printing}
-                    className="btn btn-primary text-xs py-2.5"
-                  >
-                    {printing ? <Loader2 size={14} className="animate-spin" /> : <Printer size={14} />}
-                    Struk Kasir (80mm)
-                  </button>
-                  <button
-                    onClick={handleKitchenPrint}
-                    disabled={printing}
-                    className="btn btn-secondary text-xs py-2.5 border border-[var(--color-primary-500)]/40"
-                  >
-                    {printing ? <Loader2 size={14} className="animate-spin" /> : <Printer size={14} />}
-                    Nota Dapur (58/50mm)
-                  </button>
+                <div className="space-y-2">
+                  <div className="grid grid-cols-2 gap-2">
+                    <button
+                      onClick={handleBluetoothPrint}
+                      disabled={printing}
+                      className="btn btn-primary text-xs py-2.5"
+                    >
+                      {printing ? <Loader2 size={14} className="animate-spin" /> : <Printer size={14} />}
+                      Struk Kasir (80mm)
+                    </button>
+                    <button
+                      onClick={handleKitchenPrint}
+                      disabled={printing}
+                      className="btn btn-secondary text-xs py-2.5 border border-[var(--color-primary-500)]/40"
+                    >
+                      {printing ? <Loader2 size={14} className="animate-spin" /> : <Printer size={14} />}
+                      Nota Dapur (58/50mm)
+                    </button>
+                  </div>
+
+                  <div className="flex items-center justify-between text-[11px] text-[var(--color-text-dim)] pt-1 px-1">
+                    <span className="truncate max-w-[190px]">Printer: <strong className="text-white">{getSavedDesktopPrinterName() || 'Otomatis'}</strong></span>
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        try {
+                          await ensureDesktopPrinterConnected(true);
+                          toast.success(`Terhubung ke ${getSavedDesktopPrinterName() || 'Printer'}`, { icon: '🖨️' });
+                        } catch (e: any) {
+                          toast.error(e.message || 'Batal memilih printer');
+                        }
+                      }}
+                      className="text-cyan-400 hover:underline font-medium shrink-0"
+                    >
+                      Pilih / Ganti Printer
+                    </button>
+                  </div>
                 </div>
               ) : (
                 /* --- FALLBACK (no BLE) — clipboard --- */

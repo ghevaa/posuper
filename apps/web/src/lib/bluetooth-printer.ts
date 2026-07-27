@@ -70,6 +70,60 @@ export function isPrinterConnected(): boolean {
   return isConnected && !!writeCharacteristic;
 }
 
+export function getSavedDesktopPrinterName(): string | null {
+  return bluetoothDevice?.name || null;
+}
+
+// Internal: discover writable characteristic on a GATT server
+async function discoverWriteChar(server: BluetoothRemoteGATTServer): Promise<boolean> {
+  const services = await server.getPrimaryServices();
+
+  for (const service of services) {
+    try {
+      const chars = await service.getCharacteristics();
+      for (const char of chars) {
+        if (char.properties.write || char.properties.writeWithoutResponse) {
+          writeCharacteristic = char;
+          isConnected = true;
+          console.log(`Printer connected: ${bluetoothDevice?.name || 'Unknown'}, Service: ${service.uuid}, Char: ${char.uuid}`);
+          return true;
+        }
+      }
+    } catch {
+      continue;
+    }
+  }
+  return false;
+}
+
+// Try to silently reconnect to an already-paired device (no picker dialog)
+async function tryReconnect(): Promise<boolean> {
+  if (!bluetoothDevice || !bluetoothDevice.gatt) return false;
+
+  try {
+    const server = await bluetoothDevice.gatt.connect();
+    return await discoverWriteChar(server);
+  } catch (err) {
+    console.warn('Silent reconnect failed:', err);
+    return false;
+  }
+}
+
+// Ensure printer is connected (auto-reconnect if possible, picker only if needed)
+export async function ensureDesktopPrinterConnected(forcePicker = false): Promise<boolean> {
+  // Already connected? Just return.
+  if (!forcePicker && isPrinterConnected()) return true;
+
+  // Try silent reconnect to previously paired device
+  if (!forcePicker && bluetoothDevice) {
+    const ok = await tryReconnect();
+    if (ok) return true;
+  }
+
+  // Fall back to picker dialog
+  return connectPrinter();
+}
+
 export async function connectPrinter(): Promise<boolean> {
   if (!isBLESupported()) {
     throw new Error('Bluetooth tidak didukung di browser/app ini. Gunakan Chrome atau aplikasi Android.');
@@ -97,30 +151,11 @@ export async function connectPrinter(): Promise<boolean> {
     // Connect to GATT server
     const server = await bluetoothDevice.gatt.connect();
 
-    // Try to find writable characteristic from known service/char UUIDs
-    const services = await server.getPrimaryServices();
-
-    for (const service of services) {
-      try {
-        const chars = await service.getCharacteristics();
-        for (const char of chars) {
-          if (
-            char.properties.write ||
-            char.properties.writeWithoutResponse
-          ) {
-            writeCharacteristic = char;
-            isConnected = true;
-            console.log(`Printer connected: ${bluetoothDevice.name || 'Unknown'}, Service: ${service.uuid}, Char: ${char.uuid}`);
-            return true;
-          }
-        }
-      } catch {
-        // Skip services we can't read
-        continue;
-      }
+    const found = await discoverWriteChar(server);
+    if (!found) {
+      throw new Error('Tidak ditemukan karakteristik tulis pada printer. Pastikan printer sudah menyala.');
     }
-
-    throw new Error('Tidak ditemukan karakteristik tulis pada printer. Pastikan printer sudah menyala.');
+    return true;
   } catch (err: any) {
     isConnected = false;
     writeCharacteristic = null;
@@ -208,9 +243,7 @@ export interface ReceiptData {
 }
 
 export async function printReceipt(receipt: ReceiptData): Promise<void> {
-  if (!isPrinterConnected()) {
-    await connectPrinter();
-  }
+  await ensureDesktopPrinterConnected();
 
   // 80mm = 48 chars/line, 58mm/50mm = 32 chars/line
   const paperWidth = receipt.paperSize === '58mm' ? 32 : 48;
@@ -308,9 +341,7 @@ export interface KitchenTicketData {
 }
 
 export async function printKitchenTicket(data: KitchenTicketData): Promise<void> {
-  if (!isPrinterConnected()) {
-    await connectPrinter();
-  }
+  await ensureDesktopPrinterConnected();
 
   const paperWidth = data.paperSize === '80mm' ? 48 : 32; // Default 58mm/50mm for kitchen
   const dashLine = (): string => '-'.repeat(paperWidth);
@@ -354,9 +385,7 @@ export async function printKitchenTicket(data: KitchenTicketData): Promise<void>
 
 // --- Quick Test Print ---
 export async function testPrint(): Promise<void> {
-  if (!isPrinterConnected()) {
-    await connectPrinter();
-  }
+  await ensureDesktopPrinterConnected();
 
   const data = concat(
     CMD.INIT,
