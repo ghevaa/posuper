@@ -65,9 +65,6 @@ export default function DashboardLayout() {
 
   const links = (() => {
     const sections: { title: string; items: typeof cashierLinks }[] = [];
-    if (user?.role === 'kitchen') {
-      sections.push({ title: 'Dapur', items: kitchenLinks });
-    }
     if (user?.role === 'cashier' || user?.role === 'admin' || user?.role === 'developer') {
       sections.push({ title: 'Kasir', items: cashierLinks });
     }

@@ -163,7 +163,6 @@ export default function AdminUsers() {
                           className="bg-[var(--color-surface)] border border-[var(--color-border)] rounded text-xs px-2 py-1 focus:outline-none"
                         >
                           <option value="cashier">Kasir</option>
-                          <option value="kitchen">Dapur</option>
                           <option value="admin">Admin</option>
                           <option value="developer">Developer</option>
                         </select>
@@ -260,7 +259,6 @@ export default function AdminUsers() {
                   className="input text-sm"
                 >
                   <option value="cashier">Kasir (Hanya Akses POS)</option>
-                  <option value="kitchen">Dapur (Hanya Akses Pesanan Dapur)</option>
                   <option value="admin">Admin (Akses Laporan & Produk)</option>
                   {currentUser?.role === 'developer' && <option value="developer">Developer (Akses Full System)</option>}
                 </select>
