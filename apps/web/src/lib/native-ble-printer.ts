@@ -238,6 +238,7 @@ export async function nativePrintReceipt(receipt: ReceiptData): Promise<void> {
     return left + ' '.repeat(Math.max(1, spaces)) + right;
   };
   const dashLine = (): string => '-'.repeat(paperWidth);
+  const doubleLine = (): string => '='.repeat(paperWidth);
 
   const data: number[] = [];
   const addCmd = (cmd: number[]) => data.push(...cmd);
@@ -257,10 +258,10 @@ export async function nativePrintReceipt(receipt: ReceiptData): Promise<void> {
 
   // Invoice info
   addCmd(CMD.ALIGN_LEFT);
-  addLine(dashLine());
-  addLine(`No: ${receipt.invoiceNo}`);
-  addLine(`Kasir: ${receipt.cashierName}`);
-  addLine(`Tgl: ${receipt.date.toLocaleDateString('id-ID', {
+  addLine(doubleLine());
+  addLine(`No Inv : ${receipt.invoiceNo}`);
+  addLine(`Kasir  : ${receipt.cashierName}`);
+  addLine(`Tgl    : ${receipt.date.toLocaleDateString('id-ID', {
     day: '2-digit', month: '2-digit', year: 'numeric',
   })} ${receipt.date.toLocaleTimeString('id-ID', {
     hour: '2-digit', minute: '2-digit',
@@ -277,7 +278,7 @@ export async function nativePrintReceipt(receipt: ReceiptData): Promise<void> {
       : itemName;
 
     addLine(displayName);
-    const qtyPrice = `  ${item.qty}x ${formatCurrency(item.price)}`;
+    const qtyPrice = `  ${item.qty}x @${formatCurrency(item.price)}`;
     const lineTotal = formatCurrency(item.qty * item.price);
     addLine(padLine(qtyPrice, lineTotal));
   }
@@ -296,16 +297,19 @@ export async function nativePrintReceipt(receipt: ReceiptData): Promise<void> {
     addLine(padLine('Kembalian', formatCurrency(receipt.changeAmount)));
   }
 
-  addLine(dashLine());
+  addLine(doubleLine());
 
   // Footer
   addCmd(CMD.ALIGN_CENTER);
-  addLine('');
   addLine('Terima Kasih!');
   addLine('Selamat Menikmati');
-  addLine('');
+  addLine(doubleLine());
 
-  // Feed & Cut
+  // Extra Feed Lines so text is pushed past the printer tear bar
+  addLine('');
+  addLine('');
+  addLine('');
+  addLine('');
   addCmd(CMD.FEED_5);
   addCmd(CMD.PARTIAL_CUT);
 
@@ -318,6 +322,7 @@ export async function nativePrintKitchenTicket(ticket: KitchenTicketData): Promi
 
   const paperWidth = ticket.paperSize === '80mm' ? 48 : 32;
   const dashLine = (): string => '-'.repeat(paperWidth);
+  const doubleLine = (): string => '='.repeat(paperWidth);
 
   const data: number[] = [];
   const addCmd = (cmd: number[]) => data.push(...cmd);
@@ -333,9 +338,12 @@ export async function nativePrintKitchenTicket(ticket: KitchenTicketData): Promi
   addCmd(CMD.LINE);
 
   addCmd(CMD.ALIGN_LEFT);
-  addLine(dashLine());
-  addLine(`No Inv: ${ticket.invoiceNo}`);
-  addLine(`Waktu : ${ticket.date.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })}`);
+  addLine(doubleLine());
+  addLine(`No Inv : ${ticket.invoiceNo}`);
+  addLine(`Waktu  : ${ticket.date.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })}`);
+  if (ticket.cashierName) {
+    addLine(`Kasir  : ${ticket.cashierName}`);
+  }
   addLine(dashLine());
 
   addCmd(CMD.BOLD_ON);
@@ -347,7 +355,16 @@ export async function nativePrintKitchenTicket(ticket: KitchenTicketData): Promi
   }
   addCmd(CMD.BOLD_OFF);
 
-  addLine(dashLine());
+  addLine(doubleLine());
+  addCmd(CMD.ALIGN_CENTER);
+  addLine('--- SOBEK DI SINI ---');
+  addLine(doubleLine());
+
+  // Extra Feed Lines so text is pushed past the printer tear bar
+  addLine('');
+  addLine('');
+  addLine('');
+  addLine('');
   addCmd(CMD.FEED_5);
   addCmd(CMD.PARTIAL_CUT);
 

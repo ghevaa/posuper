@@ -254,6 +254,7 @@ export async function printReceipt(receipt: ReceiptData): Promise<void> {
   };
 
   const dashLine = (): string => '-'.repeat(paperWidth);
+  const doubleLine = (): string => '='.repeat(paperWidth);
 
   const lines: Uint8Array[] = [];
   const addLine = (text: string) => {
@@ -274,10 +275,10 @@ export async function printReceipt(receipt: ReceiptData): Promise<void> {
 
   // Invoice info
   lines.push(CMD.ALIGN_LEFT);
-  addLine(dashLine());
-  addLine(`No: ${receipt.invoiceNo}`);
-  addLine(`Kasir: ${receipt.cashierName}`);
-  addLine(`Tgl: ${receipt.date.toLocaleDateString('id-ID', {
+  addLine(doubleLine());
+  addLine(`No Inv : ${receipt.invoiceNo}`);
+  addLine(`Kasir  : ${receipt.cashierName}`);
+  addLine(`Tgl    : ${receipt.date.toLocaleDateString('id-ID', {
     day: '2-digit', month: '2-digit', year: 'numeric',
   })} ${receipt.date.toLocaleTimeString('id-ID', {
     hour: '2-digit', minute: '2-digit',
@@ -294,7 +295,7 @@ export async function printReceipt(receipt: ReceiptData): Promise<void> {
       : itemName;
 
     addLine(displayName);
-    const qtyPrice = `  ${item.qty}x ${formatCurrency(item.price)}`;
+    const qtyPrice = `  ${item.qty}x @${formatCurrency(item.price)}`;
     const lineTotal = formatCurrency(item.qty * item.price);
     addLine(padLine(qtyPrice, lineTotal));
   }
@@ -313,16 +314,19 @@ export async function printReceipt(receipt: ReceiptData): Promise<void> {
     addLine(padLine('Kembalian', formatCurrency(receipt.changeAmount)));
   }
 
-  addLine(dashLine());
+  addLine(doubleLine());
 
   // Footer
   lines.push(CMD.ALIGN_CENTER);
-  addLine('');
   addLine('Terima Kasih!');
   addLine('Selamat Menikmati');
-  addLine('');
+  addLine(doubleLine());
 
-  // Feed & Cut
+  // Extra Feed Lines so text is pushed past the printer tear bar
+  addLine('');
+  addLine('');
+  addLine('');
+  addLine('');
   lines.push(CMD.FEED_5);
   lines.push(CMD.PARTIAL_CUT);
 
@@ -344,6 +348,7 @@ export async function printKitchenTicket(data: KitchenTicketData): Promise<void>
 
   const paperWidth = data.paperSize === '80mm' ? 48 : 32; // Default 58mm/50mm for kitchen
   const dashLine = (): string => '-'.repeat(paperWidth);
+  const doubleLine = (): string => '='.repeat(paperWidth);
 
   const lines: Uint8Array[] = [];
   const addLine = (text: string) => {
@@ -360,9 +365,12 @@ export async function printKitchenTicket(data: KitchenTicketData): Promise<void>
   lines.push(CMD.LINE);
 
   lines.push(CMD.ALIGN_LEFT);
-  addLine(dashLine());
-  addLine(`No Inv: ${data.invoiceNo}`);
-  addLine(`Waktu : ${data.date.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })}`);
+  addLine(doubleLine());
+  addLine(`No Inv : ${data.invoiceNo}`);
+  addLine(`Waktu  : ${data.date.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })}`);
+  if (data.cashierName) {
+    addLine(`Kasir  : ${data.cashierName}`);
+  }
   addLine(dashLine());
 
   // Kitchen items in large text
@@ -375,7 +383,16 @@ export async function printKitchenTicket(data: KitchenTicketData): Promise<void>
   }
   lines.push(CMD.BOLD_OFF);
 
-  addLine(dashLine());
+  addLine(doubleLine());
+  lines.push(CMD.ALIGN_CENTER);
+  addLine('--- SOBEK DI SINI ---');
+  addLine(doubleLine());
+
+  // Extra Feed Lines so text is pushed past the printer tear bar
+  addLine('');
+  addLine('');
+  addLine('');
+  addLine('');
   lines.push(CMD.FEED_5);
   lines.push(CMD.PARTIAL_CUT);
 
