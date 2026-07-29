@@ -34,13 +34,33 @@ const KNOWN_SERVICE_UUIDS = [
   'e7810a71-73ae-499d-8c15-faa9aef0c3f2',
 ];
 
-const SAVED_DEVICE_KEY = 'pos_saved_printer_id';
-const SAVED_DEVICE_NAME = 'pos_saved_printer_name';
+type PrinterTarget = 'cashier' | 'kitchen';
 
-// State
-let connectedDeviceId: string | null = null;
-let writeServiceUuid: string | null = null;
-let writeCharUuid: string | null = null;
+const SAVED_KEYS: Record<PrinterTarget, { id: string; name: string }> = {
+  cashier: { id: 'pos_printer_cashier_id', name: 'pos_printer_cashier_name' },
+  kitchen: { id: 'pos_printer_kitchen_id', name: 'pos_printer_kitchen_name' },
+};
+
+// Fallback legacy keys migration
+if (localStorage.getItem('pos_saved_printer_id') && !localStorage.getItem('pos_printer_cashier_id')) {
+  localStorage.setItem('pos_printer_cashier_id', localStorage.getItem('pos_saved_printer_id')!);
+  if (localStorage.getItem('pos_saved_printer_name')) {
+    localStorage.setItem('pos_printer_cashier_name', localStorage.getItem('pos_saved_printer_name')!);
+  }
+}
+
+// State per target
+interface PrinterState {
+  deviceId: string | null;
+  writeServiceUuid: string | null;
+  writeCharUuid: string | null;
+}
+
+const states: Record<PrinterTarget, PrinterState> = {
+  cashier: { deviceId: null, writeServiceUuid: null, writeCharUuid: null },
+  kitchen: { deviceId: null, writeServiceUuid: null, writeCharUuid: null },
+};
+
 let initialized = false;
 
 const textEncoder = new TextEncoder();
@@ -57,25 +77,24 @@ async function ensureInitialized(): Promise<void> {
   }
 }
 
-export function getSavedPrinterName(): string | null {
-  return localStorage.getItem(SAVED_DEVICE_NAME);
+export function getSavedPrinterName(target: PrinterTarget = 'cashier'): string | null {
+  return localStorage.getItem(SAVED_KEYS[target].name);
 }
 
-export function isNativePrinterConnected(): boolean {
-  return !!connectedDeviceId && !!writeServiceUuid && !!writeCharUuid;
+export function isNativePrinterConnected(target: PrinterTarget = 'cashier'): boolean {
+  const st = states[target];
+  return !!st.deviceId && !!st.writeServiceUuid && !!st.writeCharUuid;
 }
 
 // Connect directly to a specific deviceId (silent auto-reconnect)
-async function connectToDeviceId(deviceId: string, name?: string): Promise<boolean> {
+async function connectToDeviceId(target: PrinterTarget, deviceId: string, name?: string): Promise<boolean> {
   await ensureInitialized();
 
   try {
     await BleClient.connect(deviceId, (disconnectedId) => {
-      console.log(`Printer disconnected: ${disconnectedId}`);
-      if (connectedDeviceId === disconnectedId) {
-        connectedDeviceId = null;
-        writeServiceUuid = null;
-        writeCharUuid = null;
+      console.log(`Printer ${target} disconnected: ${disconnectedId}`);
+      if (states[target].deviceId === disconnectedId) {
+        states[target] = { deviceId: null, writeServiceUuid: null, writeCharUuid: null };
       }
     });
 
@@ -99,33 +118,40 @@ async function connectToDeviceId(deviceId: string, name?: string): Promise<boole
       return false;
     }
 
-    connectedDeviceId = deviceId;
-    writeServiceUuid = foundService;
-    writeCharUuid = foundChar;
-    if (name) localStorage.setItem(SAVED_DEVICE_NAME, name);
-    localStorage.setItem(SAVED_DEVICE_KEY, deviceId);
+    states[target] = {
+      deviceId,
+      writeServiceUuid: foundService,
+      writeCharUuid: foundChar,
+    };
+
+    if (name) localStorage.setItem(SAVED_KEYS[target].name, name);
+    localStorage.setItem(SAVED_KEYS[target].id, deviceId);
     return true;
   } catch (err) {
-    console.warn('Auto-reconnect to saved printer failed:', err);
+    console.warn(`Auto-reconnect to saved ${target} printer failed:`, err);
     return false;
   }
 }
 
-export async function connectNativePrinter(): Promise<string> {
-  return ensureNativePrinterConnected(true);
+export async function connectNativePrinter(target: PrinterTarget = 'cashier'): Promise<string> {
+  return ensureNativePrinterConnectedSlot(target, true);
 }
 
-// Ensure connection (uses saved printer if available, otherwise prompts picker)
 export async function ensureNativePrinterConnected(forcePicker = false): Promise<string> {
-  if (!forcePicker && isNativePrinterConnected()) {
-    return localStorage.getItem(SAVED_DEVICE_NAME) || connectedDeviceId || 'Printer';
+  return ensureNativePrinterConnectedSlot('cashier', forcePicker);
+}
+
+// Ensure connection for specific slot (cashier or kitchen)
+export async function ensureNativePrinterConnectedSlot(target: PrinterTarget = 'cashier', forcePicker = false): Promise<string> {
+  if (!forcePicker && isNativePrinterConnected(target)) {
+    return localStorage.getItem(SAVED_KEYS[target].name) || states[target].deviceId || `Printer ${target}`;
   }
 
-  const savedId = localStorage.getItem(SAVED_DEVICE_KEY);
-  const savedName = localStorage.getItem(SAVED_DEVICE_NAME);
+  const savedId = localStorage.getItem(SAVED_KEYS[target].id);
+  const savedName = localStorage.getItem(SAVED_KEYS[target].name);
 
   if (!forcePicker && savedId) {
-    const success = await connectToDeviceId(savedId, savedName || undefined);
+    const success = await connectToDeviceId(target, savedId, savedName || undefined);
     if (success) {
       return savedName || savedId;
     }
@@ -134,9 +160,9 @@ export async function ensureNativePrinterConnected(forcePicker = false): Promise
   // If no saved device OR direct connect failed OR forcePicker is true: prompt picker!
   await ensureInitialized();
 
-  if (connectedDeviceId) {
-    try { await BleClient.disconnect(connectedDeviceId); } catch {}
-    connectedDeviceId = null;
+  if (states[target].deviceId) {
+    try { await BleClient.disconnect(states[target].deviceId!); } catch {}
+    states[target] = { deviceId: null, writeServiceUuid: null, writeCharUuid: null };
   }
 
   const device = await BleClient.requestDevice({
@@ -148,7 +174,7 @@ export async function ensureNativePrinterConnected(forcePicker = false): Promise
   }
 
   const printerName = device.name || device.deviceId;
-  const success = await connectToDeviceId(device.deviceId, printerName);
+  const success = await connectToDeviceId(target, device.deviceId, printerName);
   if (!success) {
     throw new Error('Tidak dapat terhubung atau tidak ditemukan karakteristik tulis pada printer');
   }
@@ -156,36 +182,41 @@ export async function ensureNativePrinterConnected(forcePicker = false): Promise
   return printerName;
 }
 
-export async function disconnectNativePrinter(): Promise<void> {
-  if (connectedDeviceId) {
+export async function disconnectNativePrinterSlot(target: PrinterTarget = 'cashier'): Promise<void> {
+  const currentId = states[target].deviceId;
+  if (currentId) {
     try {
-      await BleClient.disconnect(connectedDeviceId);
+      await BleClient.disconnect(currentId);
     } catch {}
   }
-  connectedDeviceId = null;
-  writeServiceUuid = null;
-  writeCharUuid = null;
+  states[target] = { deviceId: null, writeServiceUuid: null, writeCharUuid: null };
+  localStorage.removeItem(SAVED_KEYS[target].id);
+  localStorage.removeItem(SAVED_KEYS[target].name);
 }
 
-export function forgetSavedPrinter(): void {
-  disconnectNativePrinter();
-  localStorage.removeItem(SAVED_DEVICE_KEY);
-  localStorage.removeItem(SAVED_DEVICE_NAME);
+export function forgetSavedPrinter(target: PrinterTarget = 'cashier'): void {
+  disconnectNativePrinterSlot(target);
+}
+
+export async function disconnectNativePrinter(): Promise<void> {
+  await disconnectNativePrinterSlot('cashier');
+  await disconnectNativePrinterSlot('kitchen');
 }
 
 // --- Send data (chunked) ---
-async function sendData(data: number[]): Promise<void> {
-  if (!connectedDeviceId || !writeServiceUuid || !writeCharUuid) {
-    throw new Error('Printer tidak terhubung');
+async function sendDataToTarget(target: PrinterTarget, data: number[]): Promise<void> {
+  const st = states[target];
+  if (!st.deviceId || !st.writeServiceUuid || !st.writeCharUuid) {
+    throw new Error(`Printer ${target === 'cashier' ? 'Kasir' : 'Dapur'} belum dikoneksikan`);
   }
 
   const CHUNK_SIZE = 100;
   for (let i = 0; i < data.length; i += CHUNK_SIZE) {
     const chunk = data.slice(i, i + CHUNK_SIZE);
     await BleClient.write(
-      connectedDeviceId,
-      writeServiceUuid,
-      writeCharUuid,
+      st.deviceId,
+      st.writeServiceUuid,
+      st.writeCharUuid,
       numbersToDataView(chunk),
     );
     await new Promise((r) => setTimeout(r, 30));
@@ -229,7 +260,7 @@ export interface KitchenTicketData {
 
 // --- Print Receipt ---
 export async function nativePrintReceipt(receipt: ReceiptData): Promise<void> {
-  await ensureNativePrinterConnected();
+  await ensureNativePrinterConnectedSlot('cashier');
 
   const paperWidth = receipt.paperSize === '58mm' ? 32 : 48;
 
@@ -313,12 +344,12 @@ export async function nativePrintReceipt(receipt: ReceiptData): Promise<void> {
   addCmd(CMD.FEED_5);
   addCmd(CMD.PARTIAL_CUT);
 
-  await sendData(data);
+  await sendDataToTarget('cashier', data);
 }
 
 // --- Print Kitchen Ticket ---
 export async function nativePrintKitchenTicket(ticket: KitchenTicketData): Promise<void> {
-  await ensureNativePrinterConnected();
+  await ensureNativePrinterConnectedSlot('kitchen');
 
   const paperWidth = ticket.paperSize === '80mm' ? 48 : 32;
   const dashLine = (): string => '-'.repeat(paperWidth);
@@ -368,12 +399,12 @@ export async function nativePrintKitchenTicket(ticket: KitchenTicketData): Promi
   addCmd(CMD.FEED_5);
   addCmd(CMD.PARTIAL_CUT);
 
-  await sendData(data);
+  await sendDataToTarget('kitchen', data);
 }
 
 // --- Test Print ---
-export async function nativeTestPrint(): Promise<void> {
-  await ensureNativePrinterConnected();
+export async function nativeTestPrint(target: PrinterTarget = 'cashier'): Promise<void> {
+  await ensureNativePrinterConnectedSlot(target);
 
   const data: number[] = [];
   data.push(...CMD.INIT);
@@ -381,11 +412,10 @@ export async function nativeTestPrint(): Promise<void> {
   data.push(...CMD.BOLD_ON);
   data.push(...encode('=== TEST PRINT ===\n'));
   data.push(...CMD.BOLD_OFF);
-  data.push(...encode('Printer terhubung!\n'));
-  data.push(...encode('POS Yoga Ready\n'));
+  data.push(...encode(`Printer ${target === 'cashier' ? 'Kasir' : 'Dapur'} Ready!\n`));
   data.push(...encode('\n'));
   data.push(...CMD.FEED_3);
   data.push(...CMD.PARTIAL_CUT);
 
-  await sendData(data);
+  await sendDataToTarget(target, data);
 }

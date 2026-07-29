@@ -5,8 +5,19 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '../lib/api';
-import { Save, Loader2, Printer, Settings } from 'lucide-react';
+import { Save, Loader2, Printer, Settings, Bluetooth, Utensils } from 'lucide-react';
 import toast from 'react-hot-toast';
+import { Capacitor } from '@capacitor/core';
+import {
+  ensureNativePrinterConnectedSlot,
+  getSavedPrinterName,
+  forgetSavedPrinter,
+} from '../lib/native-ble-printer';
+import {
+  ensureDesktopPrinterConnectedSlot,
+  getSavedDesktopPrinterName,
+  disconnectPrinterSlot,
+} from '../lib/bluetooth-printer';
 
 export default function DevSettings() {
   const [form, setForm] = useState<Record<string, string>>({});
@@ -112,27 +123,135 @@ export default function DevSettings() {
             </button>
           </form>
 
-          {/* Printer Config */}
-          <div className="glass-card p-6 space-y-4">
+          {/* Dual Printer Config (Kasir & Dapur) */}
+          <div className="glass-card p-6 space-y-6">
             <h3 className="font-bold text-base border-b border-[var(--color-border)] pb-2 flex items-center gap-2">
-              <Printer size={18} />
-              Daftar Printer
+              <Printer size={18} className="text-cyan-400" />
+              Pengaturan Printer (Ter-Lock)
             </h3>
-            <div className="space-y-3">
-              {printers.map((p) => (
-                <div key={p.id} className="p-3 rounded-lg bg-[var(--color-surface)] border border-[var(--color-border)] flex items-center justify-between">
-                  <div>
-                    <p className="text-sm font-medium">{p.name}</p>
-                    <p className="text-xs text-[var(--color-text-muted)] capitalize">{p.type} Printer</p>
-                  </div>
-                  <span className={`badge ${p.isActive ? 'badge-success' : 'badge-danger'}`}>
-                    {p.isActive ? 'Aktif' : 'Off'}
-                  </span>
+
+            {/* Printer Kasir Slot */}
+            <div className="p-4 rounded-xl bg-[var(--color-surface)] border border-[var(--color-border)] space-y-3">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h4 className="font-semibold text-sm flex items-center gap-1.5">
+                    <Printer size={14} className="text-blue-400" />
+                    Printer Kasir (Struk)
+                  </h4>
+                  <p className="text-xs text-[var(--color-text-dim)] mt-0.5">
+                    {Capacitor.isNativePlatform()
+                      ? (getSavedPrinterName('cashier') ? `Terkunci: ${getSavedPrinterName('cashier')}` : 'Belum di-connect')
+                      : (getSavedDesktopPrinterName('cashier') ? `Terkunci: ${getSavedDesktopPrinterName('cashier')}` : 'Belum di-connect')}
+                  </p>
                 </div>
-              ))}
-              {printers.length === 0 && (
-                <p className="text-xs text-[var(--color-text-dim)] text-center py-4">Belum ada printer terdaftar</p>
-              )}
+                <span className={`badge ${
+                  (Capacitor.isNativePlatform() ? getSavedPrinterName('cashier') : getSavedDesktopPrinterName('cashier'))
+                    ? 'badge-success'
+                    : 'badge-danger'
+                }`}>
+                  {(Capacitor.isNativePlatform() ? getSavedPrinterName('cashier') : getSavedDesktopPrinterName('cashier')) ? 'Locked' : 'Off'}
+                </span>
+              </div>
+
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={async () => {
+                    try {
+                      if (Capacitor.isNativePlatform()) {
+                        const name = await ensureNativePrinterConnectedSlot('cashier', true);
+                        toast.success(`Printer Kasir terhubung & terkunci: ${name}`);
+                      } else {
+                        await ensureDesktopPrinterConnectedSlot('cashier', true);
+                        toast.success(`Printer Kasir terhubung & terkunci: ${getSavedDesktopPrinterName('cashier')}`);
+                      }
+                    } catch (e: any) {
+                      toast.error(e.message || 'Gagal terhubung ke printer kasir');
+                    }
+                  }}
+                  className="btn btn-primary text-xs flex-1 py-2"
+                >
+                  <Bluetooth size={14} /> Connect Printer Kasir
+                </button>
+                {(Capacitor.isNativePlatform() ? getSavedPrinterName('cashier') : getSavedDesktopPrinterName('cashier')) && (
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      if (Capacitor.isNativePlatform()) {
+                        forgetSavedPrinter('cashier');
+                      } else {
+                        await disconnectPrinterSlot('cashier');
+                      }
+                      toast.success('Printer Kasir di-unlock');
+                    }}
+                    className="btn btn-secondary text-xs px-3 py-2 text-rose-400 border-rose-500/30"
+                  >
+                    Unlock
+                  </button>
+                )}
+              </div>
+            </div>
+
+            {/* Printer Dapur Slot */}
+            <div className="p-4 rounded-xl bg-[var(--color-surface)] border border-[var(--color-border)] space-y-3">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h4 className="font-semibold text-sm flex items-center gap-1.5">
+                    <Utensils size={14} className="text-amber-400" />
+                    Printer Dapur (Nota)
+                  </h4>
+                  <p className="text-xs text-[var(--color-text-dim)] mt-0.5">
+                    {Capacitor.isNativePlatform()
+                      ? (getSavedPrinterName('kitchen') ? `Terkunci: ${getSavedPrinterName('kitchen')}` : 'Belum di-connect')
+                      : (getSavedDesktopPrinterName('kitchen') ? `Terkunci: ${getSavedDesktopPrinterName('kitchen')}` : 'Belum di-connect')}
+                  </p>
+                </div>
+                <span className={`badge ${
+                  (Capacitor.isNativePlatform() ? getSavedPrinterName('kitchen') : getSavedDesktopPrinterName('kitchen'))
+                    ? 'badge-success'
+                    : 'badge-danger'
+                }`}>
+                  {(Capacitor.isNativePlatform() ? getSavedPrinterName('kitchen') : getSavedDesktopPrinterName('kitchen')) ? 'Locked' : 'Off'}
+                </span>
+              </div>
+
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={async () => {
+                    try {
+                      if (Capacitor.isNativePlatform()) {
+                        const name = await ensureNativePrinterConnectedSlot('kitchen', true);
+                        toast.success(`Printer Dapur terhubung & terkunci: ${name}`);
+                      } else {
+                        await ensureDesktopPrinterConnectedSlot('kitchen', true);
+                        toast.success(`Printer Dapur terhubung & terkunci: ${getSavedDesktopPrinterName('kitchen')}`);
+                      }
+                    } catch (e: any) {
+                      toast.error(e.message || 'Gagal terhubung ke printer dapur');
+                    }
+                  }}
+                  className="btn btn-secondary text-xs flex-1 py-2 border-amber-500/40"
+                >
+                  <Bluetooth size={14} /> Connect Printer Dapur
+                </button>
+                {(Capacitor.isNativePlatform() ? getSavedPrinterName('kitchen') : getSavedDesktopPrinterName('kitchen')) && (
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      if (Capacitor.isNativePlatform()) {
+                        forgetSavedPrinter('kitchen');
+                      } else {
+                        await disconnectPrinterSlot('kitchen');
+                      }
+                      toast.success('Printer Dapur di-unlock');
+                    }}
+                    className="btn btn-secondary text-xs px-3 py-2 text-rose-400 border-rose-500/30"
+                  >
+                    Unlock
+                  </button>
+                )}
+              </div>
             </div>
           </div>
         </div>

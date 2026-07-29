@@ -37,10 +37,18 @@ const PRINTER_CHAR_UUIDS = [
   'bef8d6c9-9c21-4c9e-b632-bd58c1009f9f', // Nordic UART TX
 ];
 
-// --- State ---
-let bluetoothDevice: BluetoothDevice | null = null;
-let writeCharacteristic: BluetoothRemoteGATTCharacteristic | null = null;
-let isConnected = false;
+type PrinterTarget = 'cashier' | 'kitchen';
+
+interface DesktopPrinterState {
+  device: BluetoothDevice | null;
+  char: BluetoothRemoteGATTCharacteristic | null;
+  isConnected: boolean;
+}
+
+const desktopStates: Record<PrinterTarget, DesktopPrinterState> = {
+  cashier: { device: null, char: null, isConnected: false },
+  kitchen: { device: null, char: null, isConnected: false },
+};
 
 // --- Text Encoder ---
 const textEncoder = new TextEncoder();
@@ -66,16 +74,16 @@ export function isBLESupported(): boolean {
   return typeof navigator !== 'undefined' && 'bluetooth' in navigator;
 }
 
-export function isPrinterConnected(): boolean {
-  return isConnected && !!writeCharacteristic;
+export function isPrinterConnected(target: PrinterTarget = 'cashier'): boolean {
+  return desktopStates[target].isConnected && !!desktopStates[target].char;
 }
 
-export function getSavedDesktopPrinterName(): string | null {
-  return bluetoothDevice?.name || null;
+export function getSavedDesktopPrinterName(target: PrinterTarget = 'cashier'): string | null {
+  return desktopStates[target].device?.name || null;
 }
 
 // Internal: discover writable characteristic on a GATT server
-async function discoverWriteChar(server: BluetoothRemoteGATTServer): Promise<boolean> {
+async function discoverWriteChar(target: PrinterTarget, server: BluetoothRemoteGATTServer): Promise<boolean> {
   const services = await server.getPrimaryServices();
 
   for (const service of services) {
@@ -83,9 +91,9 @@ async function discoverWriteChar(server: BluetoothRemoteGATTServer): Promise<boo
       const chars = await service.getCharacteristics();
       for (const char of chars) {
         if (char.properties.write || char.properties.writeWithoutResponse) {
-          writeCharacteristic = char;
-          isConnected = true;
-          console.log(`Printer connected: ${bluetoothDevice?.name || 'Unknown'}, Service: ${service.uuid}, Char: ${char.uuid}`);
+          desktopStates[target].char = char;
+          desktopStates[target].isConnected = true;
+          console.log(`Printer ${target} connected: ${desktopStates[target].device?.name || 'Unknown'}, Service: ${service.uuid}, Char: ${char.uuid}`);
           return true;
         }
       }
@@ -97,68 +105,74 @@ async function discoverWriteChar(server: BluetoothRemoteGATTServer): Promise<boo
 }
 
 // Try to silently reconnect to an already-paired device (no picker dialog)
-async function tryReconnect(): Promise<boolean> {
-  if (!bluetoothDevice || !bluetoothDevice.gatt) return false;
+async function tryReconnect(target: PrinterTarget): Promise<boolean> {
+  const st = desktopStates[target];
+  if (!st.device || !st.device.gatt) return false;
 
   try {
-    const server = await bluetoothDevice.gatt.connect();
-    return await discoverWriteChar(server);
+    const server = await st.device.gatt.connect();
+    return await discoverWriteChar(target, server);
   } catch (err) {
-    console.warn('Silent reconnect failed:', err);
+    console.warn(`Silent reconnect for ${target} printer failed:`, err);
     return false;
   }
 }
 
-// Ensure printer is connected (auto-reconnect if possible, picker only if needed)
+// Ensure printer is connected for specific slot
 export async function ensureDesktopPrinterConnected(forcePicker = false): Promise<boolean> {
+  return ensureDesktopPrinterConnectedSlot('cashier', forcePicker);
+}
+
+export async function ensureDesktopPrinterConnectedSlot(target: PrinterTarget = 'cashier', forcePicker = false): Promise<boolean> {
   // Already connected? Just return.
-  if (!forcePicker && isPrinterConnected()) return true;
+  if (!forcePicker && isPrinterConnected(target)) return true;
 
   // Try silent reconnect to previously paired device
-  if (!forcePicker && bluetoothDevice) {
-    const ok = await tryReconnect();
+  if (!forcePicker && desktopStates[target].device) {
+    const ok = await tryReconnect(target);
     if (ok) return true;
   }
 
   // Fall back to picker dialog
-  return connectPrinter();
+  return connectPrinterSlot(target);
 }
 
-export async function connectPrinter(): Promise<boolean> {
+export async function connectPrinterSlot(target: PrinterTarget = 'cashier'): Promise<boolean> {
   if (!isBLESupported()) {
     throw new Error('Bluetooth tidak didukung di browser/app ini. Gunakan Chrome atau aplikasi Android.');
   }
 
   try {
     // Request device — user picks from dialog
-    bluetoothDevice = await navigator.bluetooth.requestDevice({
-      // Accept all BLE devices (printer names vary widely)
+    const device = await navigator.bluetooth.requestDevice({
       acceptAllDevices: true,
       optionalServices: PRINTER_SERVICE_UUIDS,
     });
 
-    if (!bluetoothDevice || !bluetoothDevice.gatt) {
+    if (!device || !device.gatt) {
       throw new Error('Tidak ada printer yang dipilih');
     }
 
+    desktopStates[target].device = device;
+
     // Listen for disconnect
-    bluetoothDevice.addEventListener('gattserverdisconnected', () => {
-      isConnected = false;
-      writeCharacteristic = null;
-      console.log('Printer Bluetooth terputus');
+    device.addEventListener('gattserverdisconnected', () => {
+      desktopStates[target].isConnected = false;
+      desktopStates[target].char = null;
+      console.log(`Printer Bluetooth ${target} terputus`);
     });
 
     // Connect to GATT server
-    const server = await bluetoothDevice.gatt.connect();
+    const server = await device.gatt.connect();
 
-    const found = await discoverWriteChar(server);
+    const found = await discoverWriteChar(target, server);
     if (!found) {
       throw new Error('Tidak ditemukan karakteristik tulis pada printer. Pastikan printer sudah menyala.');
     }
     return true;
   } catch (err: any) {
-    isConnected = false;
-    writeCharacteristic = null;
+    desktopStates[target].isConnected = false;
+    desktopStates[target].char = null;
     if (err.name === 'NotFoundError') {
       throw new Error('Tidak ada printer Bluetooth yang ditemukan. Pastikan printer sudah menyala dan mode Bluetooth aktif.');
     }
@@ -166,33 +180,39 @@ export async function connectPrinter(): Promise<boolean> {
   }
 }
 
-export async function disconnectPrinter(): Promise<void> {
-  if (bluetoothDevice?.gatt?.connected) {
-    bluetoothDevice.gatt.disconnect();
+export async function connectPrinter(): Promise<boolean> {
+  return connectPrinterSlot('cashier');
+}
+
+export async function disconnectPrinterSlot(target: PrinterTarget = 'cashier'): Promise<void> {
+  const st = desktopStates[target];
+  if (st.device?.gatt?.connected) {
+    st.device.gatt.disconnect();
   }
-  isConnected = false;
-  writeCharacteristic = null;
-  bluetoothDevice = null;
+  desktopStates[target] = { device: null, char: null, isConnected: false };
+}
+
+export async function disconnectPrinter(): Promise<void> {
+  await disconnectPrinterSlot('cashier');
+  await disconnectPrinterSlot('kitchen');
 }
 
 // --- Send Data (chunked for BLE MTU limit) ---
 
-async function sendData(data: Uint8Array): Promise<void> {
-  if (!writeCharacteristic) {
-    throw new Error('Printer tidak terhubung');
+async function sendDataToTarget(target: PrinterTarget, data: Uint8Array): Promise<void> {
+  const st = desktopStates[target];
+  if (!st.char) {
+    throw new Error(`Printer ${target === 'cashier' ? 'Kasir' : 'Dapur'} belum terhubung`);
   }
 
-  // BLE has MTU limit (~20 bytes default, can be up to 512)
-  // Send in chunks of 100 bytes to be safe
   const CHUNK_SIZE = 100;
   for (let i = 0; i < data.length; i += CHUNK_SIZE) {
     const chunk = data.slice(i, i + CHUNK_SIZE);
-    if (writeCharacteristic.properties.writeWithoutResponse) {
-      await writeCharacteristic.writeValueWithoutResponse(chunk);
+    if (st.char.properties.writeWithoutResponse) {
+      await st.char.writeValueWithoutResponse(chunk);
     } else {
-      await writeCharacteristic.writeValueWithResponse(chunk);
+      await st.char.writeValueWithResponse(chunk);
     }
-    // Small delay between chunks to prevent buffer overflow
     await new Promise((resolve) => setTimeout(resolve, 20));
   }
 }
@@ -243,7 +263,7 @@ export interface ReceiptData {
 }
 
 export async function printReceipt(receipt: ReceiptData): Promise<void> {
-  await ensureDesktopPrinterConnected();
+  await ensureDesktopPrinterConnectedSlot('cashier');
 
   // 80mm = 48 chars/line, 58mm/50mm = 32 chars/line
   const paperWidth = receipt.paperSize === '58mm' ? 32 : 48;
@@ -331,7 +351,7 @@ export async function printReceipt(receipt: ReceiptData): Promise<void> {
   lines.push(CMD.PARTIAL_CUT);
 
   const receiptData = concat(...lines);
-  await sendData(receiptData);
+  await sendDataToTarget('cashier', receiptData);
 }
 
 // --- Kitchen Order Ticket Printing (58mm/50mm Dapur) ---
@@ -344,7 +364,7 @@ export interface KitchenTicketData {
 }
 
 export async function printKitchenTicket(data: KitchenTicketData): Promise<void> {
-  await ensureDesktopPrinterConnected();
+  await ensureDesktopPrinterConnectedSlot('kitchen');
 
   const paperWidth = data.paperSize === '80mm' ? 48 : 32; // Default 58mm/50mm for kitchen
   const dashLine = (): string => '-'.repeat(paperWidth);
@@ -397,12 +417,12 @@ export async function printKitchenTicket(data: KitchenTicketData): Promise<void>
   lines.push(CMD.PARTIAL_CUT);
 
   const ticketData = concat(...lines);
-  await sendData(ticketData);
+  await sendDataToTarget('kitchen', ticketData);
 }
 
 // --- Quick Test Print ---
-export async function testPrint(): Promise<void> {
-  await ensureDesktopPrinterConnected();
+export async function testPrint(target: PrinterTarget = 'cashier'): Promise<void> {
+  await ensureDesktopPrinterConnectedSlot(target);
 
   const data = concat(
     CMD.INIT,
@@ -410,12 +430,11 @@ export async function testPrint(): Promise<void> {
     CMD.BOLD_ON,
     encode('=== TEST PRINT ===\n'),
     CMD.BOLD_OFF,
-    encode('Printer terhubung!\n'),
-    encode('XP-58I Ready\n'),
+    encode(`Printer ${target === 'cashier' ? 'Kasir' : 'Dapur'} Ready!\n`),
     encode('\n'),
     CMD.FEED_3,
     CMD.PARTIAL_CUT,
   );
 
-  await sendData(data);
+  await sendDataToTarget(target, data);
 }
