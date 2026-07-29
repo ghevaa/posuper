@@ -43,8 +43,9 @@ jobs:
         run: npm run build -w apps/web
 
       - name: Sync Capacitor Android
+        shell: pwsh
         run: |
-          npx cap add android || true
+          if (-not (Test-Path "android")) { npx cap add android }
           npx cap copy android
         working-directory: apps/web
 
