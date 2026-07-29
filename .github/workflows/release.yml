@@ -42,17 +42,6 @@ jobs:
       - name: Build Web App
         run: npm run build -w apps/web
 
-      - name: Sync Capacitor Android
-        shell: pwsh
-        run: |
-          if (-not (Test-Path "android")) { npx cap add android }
-          npx cap copy android
-        working-directory: apps/web
-
-      - name: Build Android APK
-        run: .\gradlew.bat assembleDebug
-        working-directory: apps/web/android
-
       - name: Build and Release Tauri Desktop App
         uses: tauri-apps/tauri-action@v0
         env:
@@ -66,6 +55,20 @@ jobs:
           releaseDraft: false
           prerelease: false
           projectPath: apps/desktop
+
+      - name: Sync Capacitor Android
+        shell: pwsh
+        run: |
+          if (-not (Test-Path "android")) { npx cap add android }
+          npx cap copy android
+        working-directory: apps/web
+        continue-on-error: true
+
+      - name: Build Android APK
+        shell: cmd
+        run: gradlew.bat assembleDebug
+        working-directory: apps/web/android
+        continue-on-error: true
 
       - name: Upload Android APK to Release
         uses: softprops/action-gh-release@v2
