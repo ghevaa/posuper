@@ -215,9 +215,8 @@ export default function POSPage() {
   };
 
   const handlePay = async () => {
-    const isOnlinePayment = paymentMethod === 'online';
     const paid = Number(paidAmount);
-    if (!isOnlinePayment && paid < subtotal) {
+    if (paid < subtotal) {
       toast.error('Jumlah bayar kurang!');
       return;
     }
@@ -273,7 +272,7 @@ export default function POSPage() {
       toast.success('Transaksi tersimpan offline! Akan otomatis disinkronkan saat internet terhubung.', { icon: '💾', duration: 4000 });
     };
 
-    if (!isNetworkOnline && !isOnlinePayment) {
+    if (!isNetworkOnline) {
       try {
         await processOfflineCheckout();
       } catch (err: any) {
@@ -294,10 +293,10 @@ export default function POSPage() {
           variantId: i.variantId || null,
           variantName: i.variantName || null,
         })),
-        paidAmount: isOnlinePayment ? subtotal : paid,
+        paidAmount: paid,
         discount: 0,
         taxRate: 0,
-        paymentMethod: isOnlinePayment ? 'qris' : 'cash',
+        paymentMethod: 'cash',
       });
 
       const txData = {
@@ -305,61 +304,15 @@ export default function POSPage() {
         items: res.data.items || items.map(i => ({ productName: i.productName, qty: i.qty, price: i.price, variantName: i.variantName || null })),
       };
 
-      if (isOnlinePayment && res.data.midtransSnapToken) {
-        // Try Snap popup first
-        if ((window as any).snap) {
-          (window as any).snap.pay(res.data.midtransSnapToken, {
-            onSuccess: (result: any) => {
-              console.log('Midtrans Success:', result);
-              setLastTransaction(txData);
-              clearCart();
-              setShowPayment(false);
-              setShowReceipt(true);
-              setPaidAmount('');
-              toast.success('Pembayaran Online Berhasil!');
-              qc.invalidateQueries({ queryKey: ['products'] });
-            },
-            onPending: (result: any) => {
-              console.log('Midtrans Pending:', result);
-              setLastTransaction(txData);
-              clearCart();
-              setShowPayment(false);
-              setPaidAmount('');
-              toast.success('Menunggu Pembayaran Online...');
-              qc.invalidateQueries({ queryKey: ['products'] });
-            },
-            onError: (result: any) => {
-              console.error('Midtrans Error:', result);
-              toast.error('Pembayaran Online Gagal!');
-            },
-            onClose: () => {
-              console.log('Midtrans Closed');
-              toast('Pembayaran ditutup. Hubungi admin jika sudah bayar.', { icon: '⚠️' });
-            }
-          });
-        } else if (res.data.snapRedirectUrl) {
-          // Fallback: open payment page in external browser (works in Tauri)
-          window.open(res.data.snapRedirectUrl, '_blank');
-          setLastTransaction(txData);
-          clearCart();
-          setShowPayment(false);
-          setPaidAmount('');
-          toast.success('Halaman pembayaran dibuka di browser. Selesaikan pembayaran di sana.');
-          qc.invalidateQueries({ queryKey: ['products'] });
-        } else {
-          toast.error('Gagal memuat halaman pembayaran Midtrans!');
-        }
-      } else {
-        setLastTransaction(txData);
-        clearCart();
-        setShowPayment(false);
-        setShowReceipt(true);
-        setPaidAmount('');
-        toast.success('Transaksi berhasil!');
-        qc.invalidateQueries({ queryKey: ['products'] });
-      }
+      setLastTransaction(txData);
+      clearCart();
+      setShowPayment(false);
+      setShowReceipt(true);
+      setPaidAmount('');
+      toast.success('Transaksi berhasil!');
+      qc.invalidateQueries({ queryKey: ['products'] });
     } catch (err: any) {
-      if (!isOnlinePayment && (err.message?.includes('fetch') || err.message?.includes('network') || !navigator.onLine)) {
+      if (err.message?.includes('fetch') || err.message?.includes('network') || !navigator.onLine) {
         console.warn('Network error during checkout, falling back to offline checkout');
         await processOfflineCheckout();
       } else {
@@ -665,74 +618,46 @@ export default function POSPage() {
               </button>
             </div>
 
-            {/* Pilihan Metode */}
-            <div className="flex gap-2 mb-6">
-              <button
-                type="button"
-                onClick={() => setPaymentMethod('cash')}
-                className={`btn flex-grow ${paymentMethod === 'cash' ? 'btn-primary' : 'btn-secondary'}`}
-              >
-                Tunai (Cash)
-              </button>
-              <button
-                type="button"
-                onClick={() => setPaymentMethod('online')}
-                className={`btn flex-grow ${paymentMethod === 'online' ? 'btn-primary' : 'btn-secondary'}`}
-              >
-                <Wifi size={16} /> Online (Midtrans)
-              </button>
-            </div>
-
             <div className="text-center mb-6">
               <p className="text-sm text-[var(--color-text-muted)]">Total Tagihan</p>
               <p className="text-3xl font-bold gradient-text">{formatCurrency(subtotal)}</p>
             </div>
 
-            {paymentMethod === 'online' ? (
-              <div className="text-center p-6 border border-dashed border-[var(--color-border)] rounded-lg bg-[var(--color-surface)]">
-                <p className="text-sm font-semibold text-orange-400 mb-2">Pembayaran Online Terpilih</p>
-                <p className="text-xs text-[var(--color-text-dim)]">Setelah klik konfirmasi, halaman pembayaran Midtrans akan muncul.</p>
-                <p className="text-xs text-[var(--color-text-dim)] mt-1">Tersedia: QRIS, GoPay, ShopeePay, Transfer Bank, Kartu Kredit, dll.</p>
+            <div>
+              <label className="text-sm font-medium text-[var(--color-text-muted)] mb-2 block">Jumlah Bayar</label>
+              <input
+                type="number"
+                value={paidAmount}
+                onChange={(e) => setPaidAmount(e.target.value)}
+                className="input text-center text-2xl font-bold"
+                autoFocus
+              />
+            </div>
+
+            <div className="grid grid-cols-3 gap-2 mt-4">
+              {quickAmounts.map((amount) => (
+                <button
+                  key={amount}
+                  onClick={() => setPaidAmount(String(amount))}
+                  className="btn btn-secondary btn-sm"
+                >
+                  {formatCurrency(amount)}
+                </button>
+              ))}
+            </div>
+
+            {Number(paidAmount) >= subtotal && (
+              <div className="mt-4 p-3 rounded-lg bg-green-500/10 text-center">
+                <p className="text-sm text-[var(--color-text-muted)]">Kembalian</p>
+                <p className="text-2xl font-bold text-green-400">
+                  {formatCurrency(Number(paidAmount) - subtotal)}
+                </p>
               </div>
-            ) : (
-              <>
-                <div>
-                  <label className="text-sm font-medium text-[var(--color-text-muted)] mb-2 block">Jumlah Bayar</label>
-                  <input
-                    type="number"
-                    value={paidAmount}
-                    onChange={(e) => setPaidAmount(e.target.value)}
-                    className="input text-center text-2xl font-bold"
-                    autoFocus
-                  />
-                </div>
-
-                <div className="grid grid-cols-3 gap-2 mt-4">
-                  {quickAmounts.map((amount) => (
-                    <button
-                      key={amount}
-                      onClick={() => setPaidAmount(String(amount))}
-                      className="btn btn-secondary btn-sm"
-                    >
-                      {formatCurrency(amount)}
-                    </button>
-                  ))}
-                </div>
-
-                {Number(paidAmount) >= subtotal && (
-                  <div className="mt-4 p-3 rounded-lg bg-green-500/10 text-center">
-                    <p className="text-sm text-[var(--color-text-muted)]">Kembalian</p>
-                    <p className="text-2xl font-bold text-green-400">
-                      {formatCurrency(Number(paidAmount) - subtotal)}
-                    </p>
-                  </div>
-                )}
-              </>
             )}
 
             <button
               onClick={handlePay}
-              disabled={paying || (paymentMethod === 'cash' && Number(paidAmount) < subtotal) || (paymentMethod === 'online' && subtotal < 100)}
+              disabled={paying || Number(paidAmount) < subtotal}
               className="btn btn-success w-full btn-lg mt-6"
             >
               {paying ? <Loader2 size={20} className="animate-spin" /> : (
