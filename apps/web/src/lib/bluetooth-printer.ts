@@ -18,6 +18,7 @@ const CMD = {
   FONT_NORMAL: new Uint8Array([ESC, 0x21, 0x00]),       // Normal size
   FONT_DOUBLE_H: new Uint8Array([ESC, 0x21, 0x10]),     // Double height
   FONT_DOUBLE: new Uint8Array([ESC, 0x21, 0x30]),       // Double width+height
+  SET_LINE_SPACING_LARGE: new Uint8Array([ESC, 0x33, 40]), // Spacious line spacing (40 dots)
   CUT: new Uint8Array([GS, 0x56, 0x00]),                // Full cut
   PARTIAL_CUT: new Uint8Array([GS, 0x56, 0x01]),        // Partial cut
   FEED_3: new Uint8Array([ESC, 0x64, 0x03]),            // Feed 3 lines
@@ -281,8 +282,13 @@ export async function printReceipt(receipt: ReceiptData): Promise<void> {
     lines.push(encode(text + '\n'));
   };
 
-  // Init
+  // Init & Line Spacing
   lines.push(CMD.INIT);
+  lines.push(CMD.SET_LINE_SPACING_LARGE);
+
+  // Top margin feed
+  addLine('');
+  addLine('');
 
   // Store header
   lines.push(CMD.ALIGN_CENTER);
@@ -304,6 +310,7 @@ export async function printReceipt(receipt: ReceiptData): Promise<void> {
     hour: '2-digit', minute: '2-digit',
   })}`);
   addLine(dashLine());
+  addLine('');
 
   // Items
   for (const item of receipt.items) {
@@ -318,6 +325,7 @@ export async function printReceipt(receipt: ReceiptData): Promise<void> {
     const qtyPrice = `  ${item.qty}x @${formatCurrency(item.price)}`;
     const lineTotal = formatCurrency(item.qty * item.price);
     addLine(padLine(qtyPrice, lineTotal));
+    addLine('');
   }
 
   addLine(dashLine());
@@ -342,7 +350,13 @@ export async function printReceipt(receipt: ReceiptData): Promise<void> {
   addLine('Selamat Menikmati');
   addLine(doubleLine());
 
-  // Extra Feed Lines so text is pushed past the printer tear bar
+  // 10 Extra Feed Lines so text is pushed completely past the printer tear bar
+  addLine('');
+  addLine('');
+  addLine('');
+  addLine('');
+  addLine('');
+  addLine('');
   addLine('');
   addLine('');
   addLine('');
@@ -376,6 +390,12 @@ export async function printKitchenTicket(data: KitchenTicketData): Promise<void>
   };
 
   lines.push(CMD.INIT);
+  lines.push(CMD.SET_LINE_SPACING_LARGE);
+
+  // Top margin feed
+  addLine('');
+  addLine('');
+
   lines.push(CMD.ALIGN_CENTER);
   lines.push(CMD.FONT_DOUBLE);
   lines.push(CMD.BOLD_ON);
@@ -392,6 +412,7 @@ export async function printKitchenTicket(data: KitchenTicketData): Promise<void>
     addLine(`Kasir  : ${data.cashierName}`);
   }
   addLine(dashLine());
+  addLine('');
 
   // Kitchen items in large text
   lines.push(CMD.BOLD_ON);
@@ -400,6 +421,7 @@ export async function printKitchenTicket(data: KitchenTicketData): Promise<void>
     const hasVariant = item.variantName && !item.name.toLowerCase().includes(`(${item.variantName.toLowerCase()})`);
     const itemName = hasVariant ? `${item.name} (${item.variantName})` : item.name;
     addLine(qtyText + itemName);
+    addLine('');
   }
   lines.push(CMD.BOLD_OFF);
 
@@ -408,7 +430,13 @@ export async function printKitchenTicket(data: KitchenTicketData): Promise<void>
   addLine('--- SOBEK DI SINI ---');
   addLine(doubleLine());
 
-  // Extra Feed Lines so text is pushed past the printer tear bar
+  // 10 Extra Feed Lines so text is pushed completely past the printer tear bar
+  addLine('');
+  addLine('');
+  addLine('');
+  addLine('');
+  addLine('');
+  addLine('');
   addLine('');
   addLine('');
   addLine('');
