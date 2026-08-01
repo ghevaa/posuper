@@ -247,6 +247,7 @@ export interface ReceiptItem {
   qty: number;
   price: number;
   variantName?: string | null;
+  note?: string | null;
 }
 
 export interface ReceiptData {
@@ -255,10 +256,14 @@ export interface ReceiptData {
   cashierName: string;
   items: ReceiptItem[];
   subtotal: number;
+  discount?: number;
   total: number;
   paidAmount: number;
   changeAmount: number;
   paymentMethod: string;
+  orderType?: 'dine_in' | 'take_away';
+  tableNo?: string | null;
+  note?: string | null;
   date: Date;
   paperSize?: '58mm' | '80mm';
 }
@@ -309,6 +314,10 @@ export async function printReceipt(receipt: ReceiptData): Promise<void> {
   })} ${receipt.date.toLocaleTimeString('id-ID', {
     hour: '2-digit', minute: '2-digit',
   })}`);
+  if (receipt.orderType) {
+    const orderLabel = receipt.orderType === 'take_away' ? 'Bawa Pulang' : `Makan di Tempat${receipt.tableNo ? ` (Meja ${receipt.tableNo})` : ''}`;
+    addLine(`Tipe   : ${orderLabel}`);
+  }
   addLine(dashLine());
   addLine('');
 
@@ -325,6 +334,9 @@ export async function printReceipt(receipt: ReceiptData): Promise<void> {
     const qtyPrice = `  ${item.qty}x @${formatCurrency(item.price)}`;
     const lineTotal = formatCurrency(item.qty * item.price);
     addLine(padLine(qtyPrice, lineTotal));
+    if (item.note) {
+      addLine(`   Catatan: ${item.note}`);
+    }
     addLine('');
   }
 
@@ -332,10 +344,20 @@ export async function printReceipt(receipt: ReceiptData): Promise<void> {
 
   // Totals
   lines.push(CMD.BOLD_ON);
+  if (receipt.discount && receipt.discount > 0) {
+    addLine(padLine('Subtotal', formatCurrency(receipt.subtotal)));
+    addLine(padLine('Diskon', '-' + formatCurrency(receipt.discount)));
+  }
   addLine(padLine('TOTAL', formatCurrency(receipt.total)));
   lines.push(CMD.BOLD_OFF);
 
-  const methodLabel = receipt.paymentMethod === 'cash' ? 'Tunai' : 'Online';
+  const methodLabel = receipt.paymentMethod === 'cash'
+    ? 'Tunai'
+    : receipt.paymentMethod === 'qris'
+    ? 'QRIS'
+    : receipt.paymentMethod === 'transfer'
+    ? 'Bank Transfer'
+    : 'Non-Tunai';
   addLine(padLine('Bayar (' + methodLabel + ')', formatCurrency(receipt.paidAmount)));
 
   if (receipt.changeAmount > 0) {
@@ -373,6 +395,9 @@ export interface KitchenTicketData {
   invoiceNo: string;
   cashierName: string;
   items: ReceiptItem[];
+  orderType?: 'dine_in' | 'take_away';
+  tableNo?: string | null;
+  note?: string | null;
   date: Date;
   paperSize?: '58mm' | '80mm';
 }
@@ -399,7 +424,10 @@ export async function printKitchenTicket(data: KitchenTicketData): Promise<void>
   lines.push(CMD.ALIGN_CENTER);
   lines.push(CMD.FONT_DOUBLE);
   lines.push(CMD.BOLD_ON);
-  addLine('*** NOTA DAPUR ***');
+  const typeHeader = data.orderType === 'take_away'
+    ? '*** BAWA PULANG ***'
+    : `*** DINE IN ${data.tableNo ? `(MEJA ${data.tableNo})` : ''} ***`;
+  addLine(typeHeader);
   lines.push(CMD.FONT_NORMAL);
   lines.push(CMD.BOLD_OFF);
   lines.push(CMD.LINE);
@@ -421,6 +449,9 @@ export async function printKitchenTicket(data: KitchenTicketData): Promise<void>
     const hasVariant = item.variantName && !item.name.toLowerCase().includes(`(${item.variantName.toLowerCase()})`);
     const itemName = hasVariant ? `${item.name} (${item.variantName})` : item.name;
     addLine(qtyText + itemName);
+    if (item.note) {
+      addLine(`   * Catatan: ${item.note}`);
+    }
     addLine('');
   }
   lines.push(CMD.BOLD_OFF);
@@ -446,6 +477,103 @@ export async function printKitchenTicket(data: KitchenTicketData): Promise<void>
 
   const ticketData = concat(...lines);
   await sendDataToTarget('kitchen', ticketData);
+}
+
+// --- Shift Closing Report Printing ---
+export interface ClosingReportData {
+  storeName: string;
+  cashierName: string;
+  date: Date;
+  totalTxCount: number;
+  totalOmset: number;
+  totalCash: number;
+  totalQris: number;
+  totalTransfer: number;
+  totalNonCash: number;
+  totalDiscount: number;
+  paperSize?: '58mm' | '80mm';
+}
+
+export async function printClosingReport(report: ClosingReportData): Promise<void> {
+  await ensureDesktopPrinterConnectedSlot('cashier');
+
+  const paperWidth = report.paperSize === '80mm' ? 48 : 32;
+  const padLine = (left: string, right: string): string => {
+    const spaces = paperWidth - left.length - right.length;
+    return left + ' '.repeat(Math.max(1, spaces)) + right;
+  };
+
+  const dashLine = (): string => '-'.repeat(paperWidth);
+  const doubleLine = (): string => '='.repeat(paperWidth);
+
+  const lines: Uint8Array[] = [];
+  const addLine = (text: string) => {
+    lines.push(encode(text + '\n'));
+  };
+
+  lines.push(CMD.INIT);
+  lines.push(CMD.SET_LINE_SPACING_LARGE);
+
+  addLine('');
+  addLine('');
+
+  lines.push(CMD.ALIGN_CENTER);
+  lines.push(CMD.FONT_DOUBLE_H);
+  lines.push(CMD.BOLD_ON);
+  addLine('REKAP CLOSING KASIR');
+  lines.push(CMD.FONT_NORMAL);
+  lines.push(CMD.BOLD_OFF);
+  addLine(report.storeName);
+  lines.push(CMD.LINE);
+
+  lines.push(CMD.ALIGN_LEFT);
+  addLine(doubleLine());
+  addLine(`Kasir : ${report.cashierName}`);
+  addLine(`Tgl   : ${report.date.toLocaleDateString('id-ID', {
+    day: '2-digit', month: '2-digit', year: 'numeric',
+  })} ${report.date.toLocaleTimeString('id-ID', {
+    hour: '2-digit', minute: '2-digit',
+  })}`);
+  addLine(dashLine());
+  addLine('');
+
+  lines.push(CMD.BOLD_ON);
+  addLine(padLine('TOTAL OMSET', formatCurrency(report.totalOmset)));
+  addLine(padLine('Total Transaksi', String(report.totalTxCount) + ' Tx'));
+  lines.push(CMD.BOLD_OFF);
+  addLine(dashLine());
+
+  addLine(padLine('Tunai (Cash)', formatCurrency(report.totalCash)));
+  addLine(padLine('QRIS', formatCurrency(report.totalQris)));
+  addLine(padLine('Bank Transfer', formatCurrency(report.totalTransfer)));
+  addLine(padLine('Total Non-Tunai', formatCurrency(report.totalNonCash)));
+  addLine(dashLine());
+
+  if (report.totalDiscount > 0) {
+    addLine(padLine('Total Diskon', formatCurrency(report.totalDiscount)));
+    addLine(dashLine());
+  }
+
+  addLine(doubleLine());
+  lines.push(CMD.ALIGN_CENTER);
+  addLine('--- LAPORAN SHIFT CLOSING ---');
+  addLine(doubleLine());
+
+  addLine('');
+  addLine('');
+  addLine('');
+  addLine('');
+  addLine('');
+  addLine('');
+  addLine('');
+  addLine('');
+  addLine('');
+  addLine('');
+  lines.push(CMD.FEED_5);
+  lines.push(CMD.PARTIAL_CUT);
+
+  const reportData = concat(...lines);
+  await sendDataToTarget('cashier', reportData);
 }
 
 // --- Quick Test Print ---

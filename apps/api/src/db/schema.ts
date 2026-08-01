@@ -16,7 +16,8 @@ import {
 // --- Enums ---
 export const roleEnum = pgEnum('role', ['developer', 'admin', 'cashier', 'kitchen']);
 export const transactionStatusEnum = pgEnum('transaction_status', ['completed', 'voided', 'pending']);
-export const paymentMethodEnum = pgEnum('payment_method', ['cash', 'qris']);
+export const paymentMethodEnum = pgEnum('payment_method', ['cash', 'qris', 'transfer', 'non_cash']);
+export const orderTypeEnum = pgEnum('order_type', ['dine_in', 'take_away']);
 export const printerTypeEnum = pgEnum('printer_type', ['receipt', 'kitchen']);
 export const printerConnectionEnum = pgEnum('printer_connection', ['usb', 'network', 'bluetooth']);
 export const shiftStatusEnum = pgEnum('shift_status', ['open', 'closed']);
@@ -193,6 +194,8 @@ export const transactions = pgTable(
     status: transactionStatusEnum('status').notNull().default('completed'),
     note: text('note'),
     paymentMethod: paymentMethodEnum('payment_method').notNull().default('cash'),
+    orderType: orderTypeEnum('order_type').notNull().default('dine_in'),
+    tableNo: text('table_no'),
     midtransOrderId: text('midtrans_order_id'),
     midtransSnapToken: text('midtrans_snap_token'),
     kitchenStatus: kitchenStatusEnum('kitchen_status').notNull().default('pending'),
@@ -217,6 +220,7 @@ export const transactionItems = pgTable(
     qty: integer('qty').notNull().default(1),
     price: numeric('price', { precision: 12, scale: 2 }).notNull(),
     subtotal: numeric('subtotal', { precision: 12, scale: 2 }).notNull(),
+    note: text('note'),
   },
   (table) => [index('transaction_items_transactionId_idx').on(table.transactionId)],
 );

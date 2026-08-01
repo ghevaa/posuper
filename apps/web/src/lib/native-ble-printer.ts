@@ -5,6 +5,8 @@
 // ============================================================
 
 import { BleClient, numbersToDataView } from '@capacitor-community/bluetooth-le';
+import type { ReceiptItem, ReceiptData, KitchenTicketData, ClosingReportData } from './bluetooth-printer';
+export type { ReceiptItem, ReceiptData, KitchenTicketData, ClosingReportData };
 
 // ESC/POS Command Constants
 const ESC = 0x1b;
@@ -229,36 +231,6 @@ function formatCurrency(amount: number): string {
   return 'Rp ' + amount.toLocaleString('id-ID');
 }
 
-// --- Receipt Data Types ---
-export interface ReceiptItem {
-  name: string;
-  qty: number;
-  price: number;
-  variantName?: string | null;
-}
-
-export interface ReceiptData {
-  storeName: string;
-  invoiceNo: string;
-  cashierName: string;
-  items: ReceiptItem[];
-  subtotal: number;
-  total: number;
-  paidAmount: number;
-  changeAmount: number;
-  paymentMethod: string;
-  date: Date;
-  paperSize?: '58mm' | '80mm';
-}
-
-export interface KitchenTicketData {
-  invoiceNo: string;
-  cashierName: string;
-  items: ReceiptItem[];
-  date: Date;
-  paperSize?: '58mm' | '80mm';
-}
-
 // --- Print Receipt ---
 export async function nativePrintReceipt(receipt: ReceiptData): Promise<void> {
   await ensureNativePrinterConnectedSlot('cashier');
@@ -303,6 +275,10 @@ export async function nativePrintReceipt(receipt: ReceiptData): Promise<void> {
   })} ${receipt.date.toLocaleTimeString('id-ID', {
     hour: '2-digit', minute: '2-digit',
   })}`);
+  if (receipt.orderType) {
+    const orderLabel = receipt.orderType === 'take_away' ? 'Bawa Pulang' : `Makan di Tempat${receipt.tableNo ? ` (Meja ${receipt.tableNo})` : ''}`;
+    addLine(`Tipe   : ${orderLabel}`);
+  }
   addLine(dashLine());
   addLine('');
 
@@ -319,6 +295,9 @@ export async function nativePrintReceipt(receipt: ReceiptData): Promise<void> {
     const qtyPrice = `  ${item.qty}x @${formatCurrency(item.price)}`;
     const lineTotal = formatCurrency(item.qty * item.price);
     addLine(padLine(qtyPrice, lineTotal));
+    if (item.note) {
+      addLine(`   Catatan: ${item.note}`);
+    }
     addLine('');
   }
 
@@ -326,10 +305,20 @@ export async function nativePrintReceipt(receipt: ReceiptData): Promise<void> {
 
   // Totals
   addCmd(CMD.BOLD_ON);
+  if (receipt.discount && receipt.discount > 0) {
+    addLine(padLine('Subtotal', formatCurrency(receipt.subtotal)));
+    addLine(padLine('Diskon', '-' + formatCurrency(receipt.discount)));
+  }
   addLine(padLine('TOTAL', formatCurrency(receipt.total)));
   addCmd(CMD.BOLD_OFF);
 
-  const methodLabel = receipt.paymentMethod === 'cash' ? 'Tunai' : 'Online';
+  const methodLabel = receipt.paymentMethod === 'cash'
+    ? 'Tunai'
+    : receipt.paymentMethod === 'qris'
+    ? 'QRIS'
+    : receipt.paymentMethod === 'transfer'
+    ? 'Bank Transfer'
+    : 'Non-Tunai';
   addLine(padLine('Bayar (' + methodLabel + ')', formatCurrency(receipt.paidAmount)));
 
   if (receipt.changeAmount > 0) {
@@ -383,7 +372,10 @@ export async function nativePrintKitchenTicket(ticket: KitchenTicketData): Promi
   addCmd(CMD.ALIGN_CENTER);
   addCmd(CMD.FONT_DOUBLE);
   addCmd(CMD.BOLD_ON);
-  addLine('*** NOTA DAPUR ***');
+  const typeHeader = ticket.orderType === 'take_away'
+    ? '*** BAWA PULANG ***'
+    : `*** DINE IN ${ticket.tableNo ? `(MEJA ${ticket.tableNo})` : ''} ***`;
+  addLine(typeHeader);
   addCmd(CMD.FONT_NORMAL);
   addCmd(CMD.BOLD_OFF);
   addCmd(CMD.LINE);
@@ -404,6 +396,9 @@ export async function nativePrintKitchenTicket(ticket: KitchenTicketData): Promi
     const hasVariant = item.variantName && !item.name.toLowerCase().includes(`(${item.variantName.toLowerCase()})`);
     const itemName = hasVariant ? `${item.name} (${item.variantName})` : item.name;
     addLine(qtyText + itemName);
+    if (item.note) {
+      addLine(`   * Catatan: ${item.note}`);
+    }
     addLine('');
   }
   addCmd(CMD.BOLD_OFF);
@@ -428,6 +423,87 @@ export async function nativePrintKitchenTicket(ticket: KitchenTicketData): Promi
   addCmd(CMD.PARTIAL_CUT);
 
   await sendDataToTarget('kitchen', data);
+}
+
+// --- Native Shift Closing Report Printing ---
+export async function nativePrintClosingReport(report: ClosingReportData): Promise<void> {
+  await ensureNativePrinterConnectedSlot('cashier');
+
+  const paperWidth = report.paperSize === '80mm' ? 48 : 32;
+  const padLine = (left: string, right: string): string => {
+    const spaces = paperWidth - left.length - right.length;
+    return left + ' '.repeat(Math.max(1, spaces)) + right;
+  };
+
+  const dashLine = (): string => '-'.repeat(paperWidth);
+  const doubleLine = (): string => '='.repeat(paperWidth);
+
+  const data: number[] = [];
+  const addCmd = (cmd: number[]) => data.push(...cmd);
+  const addLine = (text: string) => data.push(...encode(text + '\n'));
+
+  addCmd(CMD.INIT);
+  addCmd(CMD.SET_LINE_SPACING_LARGE);
+
+  addLine('');
+  addLine('');
+
+  addCmd(CMD.ALIGN_CENTER);
+  addCmd(CMD.FONT_DOUBLE_H);
+  addCmd(CMD.BOLD_ON);
+  addLine('REKAP CLOSING KASIR');
+  addCmd(CMD.FONT_NORMAL);
+  addCmd(CMD.BOLD_OFF);
+  addLine(report.storeName);
+  addCmd(CMD.LINE);
+
+  addCmd(CMD.ALIGN_LEFT);
+  addLine(doubleLine());
+  addLine(`Kasir : ${report.cashierName}`);
+  addLine(`Tgl   : ${report.date.toLocaleDateString('id-ID', {
+    day: '2-digit', month: '2-digit', year: 'numeric',
+  })} ${report.date.toLocaleTimeString('id-ID', {
+    hour: '2-digit', minute: '2-digit',
+  })}`);
+  addLine(dashLine());
+  addLine('');
+
+  addCmd(CMD.BOLD_ON);
+  addLine(padLine('TOTAL OMSET', formatCurrency(report.totalOmset)));
+  addLine(padLine('Total Transaksi', String(report.totalTxCount) + ' Tx'));
+  addCmd(CMD.BOLD_OFF);
+  addLine(dashLine());
+
+  addLine(padLine('Tunai (Cash)', formatCurrency(report.totalCash)));
+  addLine(padLine('QRIS', formatCurrency(report.totalQris)));
+  addLine(padLine('Bank Transfer', formatCurrency(report.totalTransfer)));
+  addLine(padLine('Total Non-Tunai', formatCurrency(report.totalNonCash)));
+  addLine(dashLine());
+
+  if (report.totalDiscount > 0) {
+    addLine(padLine('Total Diskon', formatCurrency(report.totalDiscount)));
+    addLine(dashLine());
+  }
+
+  addLine(doubleLine());
+  addCmd(CMD.ALIGN_CENTER);
+  addLine('--- LAPORAN SHIFT CLOSING ---');
+  addLine(doubleLine());
+
+  addLine('');
+  addLine('');
+  addLine('');
+  addLine('');
+  addLine('');
+  addLine('');
+  addLine('');
+  addLine('');
+  addLine('');
+  addLine('');
+  addCmd(CMD.FEED_5);
+  addCmd(CMD.PARTIAL_CUT);
+
+  await sendDataToTarget('cashier', data);
 }
 
 // --- Test Print ---

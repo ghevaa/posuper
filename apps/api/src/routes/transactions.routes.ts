@@ -68,6 +68,8 @@ export async function transactionRoutes(app: FastifyInstance) {
         status,
         note: body.note || null,
         paymentMethod,
+        orderType: body.orderType || 'dine_in',
+        tableNo: body.tableNo || null,
         kitchenStatus: 'pending',
       });
 
@@ -97,6 +99,7 @@ export async function transactionRoutes(app: FastifyInstance) {
           qty: item.qty,
           price: String(item.price),
           subtotal: String(item.price * item.qty),
+          note: item.note || null,
         });
 
         // Deduct stock
@@ -105,15 +108,13 @@ export async function transactionRoutes(app: FastifyInstance) {
           .where(eq(products.id, item.productId));
       }
 
-      // Insert payment record only for cash
-      if (paymentMethod === 'cash') {
-        await db.insert(payments).values({
-          id: nanoid(),
-          transactionId: txId,
-          method: 'cash',
-          amount: String(paidAmount),
-        });
-      }
+      // Insert payment record
+      await db.insert(payments).values({
+        id: nanoid(),
+        transactionId: txId,
+        method: paymentMethod as any,
+        amount: String(paidAmount),
+      });
 
       // For QRIS: generate Midtrans snap token
       let snapToken: string | null = null;
@@ -410,5 +411,75 @@ export async function transactionRoutes(app: FastifyInstance) {
     }
 
     return reply.send({ success: true, message: 'Status pesanan dapur diperbarui', data: { id, kitchenStatus } });
+  });
+
+  // Get closing summary for cashier shift
+  app.get('/api/transactions/closing-summary', { preHandler: [requireAuth] }, async (req, reply) => {
+    try {
+      const { date } = req.query as { date?: string };
+      const targetDate = date ? new Date(date) : new Date();
+
+      const startOfDay = new Date(targetDate);
+      startOfDay.setHours(0, 0, 0, 0);
+
+      const endOfDay = new Date(targetDate);
+      endOfDay.setHours(23, 59, 59, 999);
+
+      const todaysTx = await db.select()
+        .from(transactions)
+        .where(
+          and(
+            gte(transactions.createdAt, startOfDay),
+            lte(transactions.createdAt, endOfDay),
+            eq(transactions.status, 'completed')
+          )
+        )
+        .orderBy(desc(transactions.createdAt));
+
+      let totalOmset = 0;
+      let totalCash = 0;
+      let totalQris = 0;
+      let totalTransfer = 0;
+      let totalNonCash = 0;
+      let totalDiscount = 0;
+      const totalTxCount = todaysTx.length;
+
+      for (const tx of todaysTx) {
+        const total = Number(tx.total);
+        const discount = Number(tx.discount);
+        totalOmset += total;
+        totalDiscount += discount;
+
+        if (tx.paymentMethod === 'cash') {
+          totalCash += total;
+        } else if (tx.paymentMethod === 'qris') {
+          totalQris += total;
+          totalNonCash += total;
+        } else if (tx.paymentMethod === 'transfer') {
+          totalTransfer += total;
+          totalNonCash += total;
+        } else {
+          totalNonCash += total;
+        }
+      }
+
+      return reply.send({
+        success: true,
+        data: {
+          date: startOfDay.toISOString(),
+          totalTxCount,
+          totalOmset,
+          totalCash,
+          totalQris,
+          totalTransfer,
+          totalNonCash,
+          totalDiscount,
+          transactions: todaysTx,
+        },
+      });
+    } catch (err: any) {
+      console.error('Closing summary error:', err);
+      return reply.status(500).send({ success: false, error: 'Gagal mengambil data closing' });
+    }
   });
 }
