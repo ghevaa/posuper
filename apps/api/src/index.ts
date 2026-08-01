@@ -40,21 +40,48 @@ const app = Fastify({
 });
 
 async function start() {
-  // Ensure 'kitchen' role and 'kitchen_status' enum exist in PostgreSQL
+  // Ensure PostgreSQL enums exist
   try {
     await db.execute(sql`ALTER TYPE "public"."role" ADD VALUE IF NOT EXISTS 'kitchen';`);
-  } catch (enumErr) {
-    // Ignore error if value already exists
-  }
+  } catch (e) {}
 
   try {
+    await db.execute(sql`ALTER TYPE "public"."payment_method" ADD VALUE IF NOT EXISTS 'qris';`);
+  } catch (e) {}
+
+  try {
+    await db.execute(sql`ALTER TYPE "public"."payment_method" ADD VALUE IF NOT EXISTS 'transfer';`);
+  } catch (e) {}
+
+  try {
+    await db.execute(sql`ALTER TYPE "public"."payment_method" ADD VALUE IF NOT EXISTS 'non_cash';`);
+  } catch (e) {}
+
+  try {
+    // Ensure order_type & kitchen_status enums exist
+    await db.execute(sql`DO $$ BEGIN
+      IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'order_type') THEN
+        CREATE TYPE "public"."order_type" AS ENUM('dine_in', 'take_away');
+      END IF;
+    END $$;`);
+
     await db.execute(sql`DO $$ BEGIN
       IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'kitchen_status') THEN
         CREATE TYPE "public"."kitchen_status" AS ENUM('pending', 'processing', 'completed');
       END IF;
     END $$;`);
+
+    // Ensure columns exist on transactions table
+    await db.execute(sql`ALTER TABLE "transactions" ADD COLUMN IF NOT EXISTS "order_type" "order_type" DEFAULT 'dine_in' NOT NULL;`);
+    await db.execute(sql`ALTER TABLE "transactions" ADD COLUMN IF NOT EXISTS "table_no" text;`);
+    await db.execute(sql`ALTER TABLE "transactions" ADD COLUMN IF NOT EXISTS "midtrans_order_id" text;`);
+    await db.execute(sql`ALTER TABLE "transactions" ADD COLUMN IF NOT EXISTS "midtrans_snap_token" text;`);
     await db.execute(sql`ALTER TABLE "transactions" ADD COLUMN IF NOT EXISTS "kitchen_status" "kitchen_status" DEFAULT 'pending' NOT NULL;`);
 
+    // Ensure columns exist on transaction_items table
+    await db.execute(sql`ALTER TABLE "transaction_items" ADD COLUMN IF NOT EXISTS "note" text;`);
+
+    // Ensure category option tables exist
     await db.execute(sql`
       CREATE TABLE IF NOT EXISTS "category_option_groups" (
         "id" text PRIMARY KEY NOT NULL,
@@ -72,6 +99,27 @@ async function start() {
         "name" text NOT NULL,
         "price" numeric(12, 2) DEFAULT '0' NOT NULL,
         "created_at" timestamp DEFAULT now() NOT NULL
+      );
+      CREATE TABLE IF NOT EXISTS "stock_opname_sessions" (
+        "id" text PRIMARY KEY NOT NULL,
+        "name" text NOT NULL,
+        "date" timestamp NOT NULL,
+        "user_id" text NOT NULL REFERENCES "user"("id"),
+        "notes" text,
+        "created_at" timestamp DEFAULT now() NOT NULL
+      );
+      CREATE TABLE IF NOT EXISTS "stock_opname_items" (
+        "id" text PRIMARY KEY NOT NULL,
+        "session_id" text NOT NULL REFERENCES "stock_opname_sessions"("id") ON DELETE CASCADE,
+        "product_id" text REFERENCES "products"("id") ON DELETE SET NULL,
+        "product_name" text NOT NULL,
+        "unit" text DEFAULT 'Pcs' NOT NULL,
+        "stock_start" integer DEFAULT 0 NOT NULL,
+        "stock_in" integer DEFAULT 0 NOT NULL,
+        "stock_real" integer DEFAULT 0 NOT NULL,
+        "usage" integer DEFAULT 0 NOT NULL,
+        "waste" integer DEFAULT 0 NOT NULL,
+        "notes" text
       );
     `);
   } catch (colErr) {
