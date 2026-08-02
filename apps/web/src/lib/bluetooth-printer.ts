@@ -280,7 +280,21 @@ export async function printReceipt(receipt: ReceiptData): Promise<void> {
   };
 
   const dashLine = (): string => '-'.repeat(paperWidth);
-  const doubleLine = (): string => '='.repeat(paperWidth);
+
+  const wrapText = (text: string, maxWidth: number): string[] => {
+    const result: string[] = [];
+    let remaining = text;
+    while (remaining.length > maxWidth) {
+      let spaceIdx = remaining.lastIndexOf(' ', maxWidth);
+      if (spaceIdx <= 0) spaceIdx = maxWidth;
+      result.push(remaining.substring(0, spaceIdx).trim());
+      remaining = remaining.substring(spaceIdx).trim();
+    }
+    if (remaining.length > 0) {
+      result.push(remaining);
+    }
+    return result;
+  };
 
   const lines: Uint8Array[] = [];
   const addLine = (text: string) => {
@@ -291,9 +305,6 @@ export async function printReceipt(receipt: ReceiptData): Promise<void> {
   lines.push(CMD.INIT);
   lines.push(CMD.SET_LINE_SPACING_COMPACT);
 
-  // Top margin feed
-  addLine('');
-
   // Store header
   lines.push(CMD.ALIGN_CENTER);
   lines.push(CMD.FONT_DOUBLE_H);
@@ -301,21 +312,25 @@ export async function printReceipt(receipt: ReceiptData): Promise<void> {
   addLine(receipt.storeName);
   lines.push(CMD.FONT_NORMAL);
   lines.push(CMD.BOLD_OFF);
-  lines.push(CMD.LINE);
+  addLine('');
 
   // Invoice info
   lines.push(CMD.ALIGN_LEFT);
-  addLine(doubleLine());
-  addLine(`No Inv : ${receipt.invoiceNo}`);
-  addLine(`Kasir  : ${receipt.cashierName}`);
-  addLine(`Tgl    : ${receipt.date.toLocaleDateString('id-ID', {
+  addLine(dashLine());
+  addLine(`No: ${receipt.invoiceNo}`);
+  addLine(`Kasir: ${receipt.cashierName}`);
+
+  const dateStr = receipt.date.toLocaleDateString('id-ID', {
     day: '2-digit', month: '2-digit', year: 'numeric',
-  })} ${receipt.date.toLocaleTimeString('id-ID', {
-    hour: '2-digit', minute: '2-digit',
-  })}`);
+  });
+  const timeStr = receipt.date.toLocaleTimeString('id-ID', {
+    hour: '2-digit', minute: '2-digit', hour12: false,
+  }).replace(':', '.');
+  addLine(`Tgl: ${dateStr} ${timeStr}`);
+
   if (receipt.orderType) {
     const orderLabel = receipt.orderType === 'take_away' ? 'Bawa Pulang' : `Makan di Tempat${receipt.tableNo ? ` (Meja ${receipt.tableNo})` : ''}`;
-    addLine(`Tipe   : ${orderLabel}`);
+    addLine(`Tipe: ${orderLabel}`);
   }
   addLine(dashLine());
 
@@ -324,12 +339,12 @@ export async function printReceipt(receipt: ReceiptData): Promise<void> {
     const hasVariant = item.variantName && !item.name.toLowerCase().includes(`(${item.variantName.toLowerCase()})`);
     const itemName = hasVariant ? `${item.name} (${item.variantName})` : item.name;
 
-    const displayName = itemName.length > paperWidth - 2
-      ? itemName.substring(0, paperWidth - 5) + '...'
-      : itemName;
+    const nameLines = wrapText(itemName, paperWidth);
+    for (const nameLine of nameLines) {
+      addLine(nameLine);
+    }
 
-    addLine(displayName);
-    const qtyPrice = `  ${item.qty}x @${formatCurrency(item.price)}`;
+    const qtyPrice = `  ${item.qty}x ${formatCurrency(item.price)}`;
     const lineTotal = formatCurrency(item.qty * item.price);
     addLine(padLine(qtyPrice, lineTotal));
     if (item.note) {
@@ -355,22 +370,21 @@ export async function printReceipt(receipt: ReceiptData): Promise<void> {
     : receipt.paymentMethod === 'transfer'
     ? 'Bank Transfer'
     : 'Non-Tunai';
-  addLine(padLine('Bayar (' + methodLabel + ')', formatCurrency(receipt.paidAmount)));
+  addLine(padLine(`Bayar (${methodLabel})`, formatCurrency(receipt.paidAmount)));
 
   if (receipt.changeAmount > 0) {
     addLine(padLine('Kembalian', formatCurrency(receipt.changeAmount)));
   }
 
-  addLine(doubleLine());
+  addLine(dashLine());
+  addLine('');
 
   // Footer
   lines.push(CMD.ALIGN_CENTER);
   addLine('Terima Kasih!');
   addLine('Selamat Menikmati');
-  addLine(doubleLine());
 
   // 3 Feed Lines to push text past tear bar cleanly
-  addLine('');
   addLine('');
   addLine('');
   lines.push(CMD.FEED_3);
