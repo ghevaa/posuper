@@ -291,6 +291,7 @@ export async function exportRoutes(app: FastifyInstance) {
     const prodList = await db.select({
       id: products.id,
       name: products.name,
+      categoryId: products.categoryId,
       categoryName: categories.name,
       sku: products.sku,
       barcode: products.barcode,
@@ -312,6 +313,7 @@ export async function exportRoutes(app: FastifyInstance) {
       .leftJoin(products, eq(productVariants.productId, products.id));
 
     const optList = await db.select({
+      categoryId: categoryOptionGroups.categoryId,
       categoryName: categories.name,
       groupName: categoryOptionGroups.name,
       optionName: categoryOptions.name,
@@ -323,14 +325,36 @@ export async function exportRoutes(app: FastifyInstance) {
       .leftJoin(categoryOptionGroups, eq(categoryOptions.groupId, categoryOptionGroups.id))
       .leftJoin(categories, eq(categoryOptionGroups.categoryId, categories.id));
 
+    // Group variants by productId
+    const variantsByProduct: Record<string, string[]> = {};
+    varList.forEach((v) => {
+      if (!v.productId) return;
+      if (!variantsByProduct[v.productId]) variantsByProduct[v.productId] = [];
+      const addPrice = Number(v.additionalPrice) || 0;
+      const priceStr = addPrice > 0 ? ` (+Rp ${addPrice.toLocaleString('id-ID')})` : '';
+      variantsByProduct[v.productId].push(`${v.variantName}${priceStr}`);
+    });
+
+    // Group options by categoryId
+    const optionsByCategory: Record<string, string[]> = {};
+    optList.forEach((o) => {
+      if (!o.categoryId) return;
+      if (!optionsByCategory[o.categoryId]) optionsByCategory[o.categoryId] = [];
+      const price = Number(o.price) || 0;
+      const priceStr = price > 0 ? ` (+Rp ${price.toLocaleString('id-ID')})` : '';
+      optionsByCategory[o.categoryId].push(`${o.groupName}: ${o.optionName}${priceStr}`);
+    });
+
     const workbook = new ExcelJS.Workbook();
 
-    // Sheet 1: Daftar Produk
+    // Sheet 1: Daftar Produk + Varian & Sub Varian
     const s1 = workbook.addWorksheet('Daftar Produk');
     s1.columns = [
       { header: 'No', key: 'no', width: 6 },
       { header: 'Nama Produk', key: 'name', width: 28 },
       { header: 'Kategori', key: 'category', width: 18 },
+      { header: 'Varian Produk', key: 'variants', width: 32 },
+      { header: 'Sub Varian / Addon Kategori', key: 'options', width: 40 },
       { header: 'SKU', key: 'sku', width: 14 },
       { header: 'Barcode', key: 'barcode', width: 16 },
       { header: 'Harga Jual (Rp)', key: 'price', width: 16 },
@@ -341,10 +365,15 @@ export async function exportRoutes(app: FastifyInstance) {
     s1.getRow(1).eachCell((cell) => styleHeaderCell(cell));
 
     prodList.forEach((p, i) => {
+      const productVars = variantsByProduct[p.id]?.join(', ') || '-';
+      const catOpts = (p.categoryId && optionsByCategory[p.categoryId]) ? optionsByCategory[p.categoryId].join('; ') : '-';
+
       const row = s1.addRow({
         no: i + 1,
         name: p.name,
         category: p.categoryName || '-',
+        variants: productVars,
+        options: catOpts,
         sku: p.sku || '-',
         barcode: p.barcode || '-',
         price: Number(p.price) || 0,
@@ -352,14 +381,15 @@ export async function exportRoutes(app: FastifyInstance) {
         stock: p.stock,
         status: p.isActive ? 'Aktif' : 'Non-Aktif',
       });
+
       row.eachCell((cell, colNumber) => {
-        const align = [1, 4, 5, 8, 9].includes(colNumber) ? 'center' : [6, 7].includes(colNumber) ? 'right' : 'left';
+        const align = [1, 6, 7, 10, 11].includes(colNumber) ? 'center' : [8, 9].includes(colNumber) ? 'right' : 'left';
         styleDataCell(cell, align);
-        if ([6, 7].includes(colNumber)) cell.numFmt = '#,##0';
+        if ([8, 9].includes(colNumber)) cell.numFmt = '#,##0';
       });
     });
 
-    // Sheet 2: Varian Produk
+    // Sheet 2: Detail Varian Produk
     const s2 = workbook.addWorksheet('Varian Produk');
     s2.columns = [
       { header: 'No', key: 'no', width: 6 },
@@ -383,7 +413,7 @@ export async function exportRoutes(app: FastifyInstance) {
       });
     });
 
-    // Sheet 3: Opsi / Addon
+    // Sheet 3: Opsi / Addon Kategori
     const s3 = workbook.addWorksheet('Opsi & Addon Kategori');
     s3.columns = [
       { header: 'No', key: 'no', width: 6 },
