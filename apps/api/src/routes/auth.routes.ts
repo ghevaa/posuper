@@ -88,17 +88,49 @@ export async function authRoutes(app: FastifyInstance) {
     return reply.send({ success: true, message: 'Role updated' });
   });
 
-  // Delete user (developer only)
-  app.delete('/api/users/:id', { preHandler: [requireRole('developer')] }, async (req, reply) => {
+import { account, session, user } from '../db/schema.js';
+
+  // Delete user (developer & admin)
+  app.delete('/api/users/:id', { preHandler: [requireRole('developer', 'admin')] }, async (req, reply) => {
     const { id } = req.params as { id: string };
     const currentUser = (req as any).user;
 
     if (id === currentUser.id) {
-      return reply.status(400).send({ success: false, error: 'Cannot delete yourself' });
+      return reply.status(400).send({ success: false, error: 'Tidak dapat menghapus akun Anda sendiri' });
     }
 
-    await db.delete(user).where(eq(user.id, id));
-    await createAuditLog(req, 'user.deleted', `User ${id} deleted`);
-    return reply.send({ success: true, message: 'User deleted' });
+    const targetUsers = await db.select().from(user).where(eq(user.id, id)).limit(1);
+    const targetUser = targetUsers[0];
+    if (!targetUser) {
+      return reply.status(404).send({ success: false, error: 'Pengguna tidak ditemukan' });
+    }
+
+    if (currentUser.role === 'admin' && (targetUser.role === 'developer' || targetUser.role === 'admin')) {
+      return reply.status(400).send({ success: false, error: 'Admin hanya dapat menghapus akun Kasir atau Dapur' });
+    }
+
+    try {
+      await db.delete(account).where(eq(account.userId, id));
+      await db.delete(session).where(eq(session.userId, id));
+
+      try {
+        await db.delete(user).where(eq(user.id, id));
+      } catch (userDelErr: any) {
+        if (userDelErr.message?.includes('foreign key constraint') || userDelErr.code === '23503') {
+          await db.update(user).set({
+            name: `${targetUser.name} (Non-Aktif)`,
+            email: `deleted_${id}@posyoga.local`,
+          }).where(eq(user.id, id));
+          await createAuditLog(req, 'user.disabled', `User ${id} disabled (has transactions)`);
+          return reply.send({ success: true, message: 'Pengguna dinonaktifkan (karena memiliki riwayat transaksi)' });
+        }
+        throw userDelErr;
+      }
+
+      await createAuditLog(req, 'user.deleted', `User ${id} deleted`);
+      return reply.send({ success: true, message: 'Pengguna berhasil dihapus' });
+    } catch (err: any) {
+      return reply.status(400).send({ success: false, error: err.message || 'Gagal menghapus pengguna' });
+    }
   });
 }

@@ -132,7 +132,7 @@ export default function AdminUsers() {
                 <th>Email</th>
                 <th>Role</th>
                 <th>Tanggal Dibuat</th>
-                {currentUser?.role === 'developer' && <th className="text-right">Aksi</th>}
+                {(currentUser?.role === 'developer' || currentUser?.role === 'admin') && <th className="text-right">Aksi</th>}
               </tr>
             </thead>
             <tbody>
@@ -177,16 +177,16 @@ export default function AdminUsers() {
                         year: 'numeric',
                       })}
                     </td>
-                    {currentUser?.role === 'developer' && (
+                    {(currentUser?.role === 'developer' || currentUser?.role === 'admin') && (
                       <td className="text-right">
-                        {u.id !== currentUser.id && (
+                        {u.id !== currentUser?.id && (currentUser?.role === 'developer' || (currentUser?.role === 'admin' && u.role !== 'developer' && u.role !== 'admin')) && (
                           <button
                             onClick={() => {
                               if (confirm(`Yakin ingin menghapus pengguna ${u.name}?`)) {
                                 deleteMutation.mutate(u.id);
                               }
                             }}
-                            className="btn btn-ghost btn-icon text-red-400 hover:text-red-300"
+                            className="btn btn-ghost btn-icon text-red-500 hover:text-red-600"
                             title="Hapus Pengguna"
                           >
                             <Trash2 size={16} />

@@ -22,7 +22,7 @@ const CMD = {
   FONT_NORMAL: [ESC, 0x21, 0x00],
   FONT_DOUBLE_H: [ESC, 0x21, 0x10],
   FONT_DOUBLE: [ESC, 0x21, 0x30],
-  SET_LINE_SPACING_LARGE: [ESC, 0x33, 40],
+  SET_LINE_SPACING_COMPACT: [ESC, 0x33, 26],
   CUT: [GS, 0x56, 0x00],
   PARTIAL_CUT: [GS, 0x56, 0x01],
   FEED_3: [ESC, 0x64, 0x03],
@@ -250,10 +250,9 @@ export async function nativePrintReceipt(receipt: ReceiptData): Promise<void> {
 
   // Init & Line Spacing
   addCmd(CMD.INIT);
-  addCmd(CMD.SET_LINE_SPACING_LARGE);
+  addCmd(CMD.SET_LINE_SPACING_COMPACT);
 
   // Top margin feed
-  addLine('');
   addLine('');
 
   // Store header
@@ -280,7 +279,6 @@ export async function nativePrintReceipt(receipt: ReceiptData): Promise<void> {
     addLine(`Tipe   : ${orderLabel}`);
   }
   addLine(dashLine());
-  addLine('');
 
   // Items
   for (const item of receipt.items) {
@@ -298,7 +296,6 @@ export async function nativePrintReceipt(receipt: ReceiptData): Promise<void> {
     if (item.note) {
       addLine(`   Catatan: ${item.note}`);
     }
-    addLine('');
   }
 
   addLine(dashLine());
@@ -333,18 +330,11 @@ export async function nativePrintReceipt(receipt: ReceiptData): Promise<void> {
   addLine('Selamat Menikmati');
   addLine(doubleLine());
 
-  // 10 Extra Feed Lines so text is pushed completely past the printer tear bar
+  // 3 Feed Lines to push text past tear bar
   addLine('');
   addLine('');
   addLine('');
-  addLine('');
-  addLine('');
-  addLine('');
-  addLine('');
-  addLine('');
-  addLine('');
-  addLine('');
-  addCmd(CMD.FEED_5);
+  addCmd(CMD.FEED_3);
   addCmd(CMD.PARTIAL_CUT);
 
   await sendDataToTarget('cashier', data);
@@ -363,10 +353,9 @@ export async function nativePrintKitchenTicket(ticket: KitchenTicketData): Promi
   const addLine = (text: string) => data.push(...encode(text + '\n'));
 
   addCmd(CMD.INIT);
-  addCmd(CMD.SET_LINE_SPACING_LARGE);
+  addCmd(CMD.SET_LINE_SPACING_COMPACT);
 
   // Top margin feed
-  addLine('');
   addLine('');
 
   addCmd(CMD.ALIGN_CENTER);
@@ -388,7 +377,6 @@ export async function nativePrintKitchenTicket(ticket: KitchenTicketData): Promi
     addLine(`Kasir  : ${ticket.cashierName}`);
   }
   addLine(dashLine());
-  addLine('');
 
   addCmd(CMD.BOLD_ON);
   for (const item of ticket.items) {
@@ -399,7 +387,6 @@ export async function nativePrintKitchenTicket(ticket: KitchenTicketData): Promi
     if (item.note) {
       addLine(`   * Catatan: ${item.note}`);
     }
-    addLine('');
   }
   addCmd(CMD.BOLD_OFF);
 
@@ -408,18 +395,11 @@ export async function nativePrintKitchenTicket(ticket: KitchenTicketData): Promi
   addLine('--- SOBEK DI SINI ---');
   addLine(doubleLine());
 
-  // 10 Extra Feed Lines so text is pushed completely past the printer tear bar
+  // 3 Feed Lines to push text past tear bar
   addLine('');
   addLine('');
   addLine('');
-  addLine('');
-  addLine('');
-  addLine('');
-  addLine('');
-  addLine('');
-  addLine('');
-  addLine('');
-  addCmd(CMD.FEED_5);
+  addCmd(CMD.FEED_3);
   addCmd(CMD.PARTIAL_CUT);
 
   await sendDataToTarget('kitchen', data);
@@ -443,9 +423,8 @@ export async function nativePrintClosingReport(report: ClosingReportData): Promi
   const addLine = (text: string) => data.push(...encode(text + '\n'));
 
   addCmd(CMD.INIT);
-  addCmd(CMD.SET_LINE_SPACING_LARGE);
+  addCmd(CMD.SET_LINE_SPACING_COMPACT);
 
-  addLine('');
   addLine('');
 
   addCmd(CMD.ALIGN_CENTER);
@@ -466,7 +445,6 @@ export async function nativePrintClosingReport(report: ClosingReportData): Promi
     hour: '2-digit', minute: '2-digit',
   })}`);
   addLine(dashLine());
-  addLine('');
 
   addCmd(CMD.BOLD_ON);
   addLine(padLine('TOTAL OMSET', formatCurrency(report.totalOmset)));
@@ -493,14 +471,7 @@ export async function nativePrintClosingReport(report: ClosingReportData): Promi
   addLine('');
   addLine('');
   addLine('');
-  addLine('');
-  addLine('');
-  addLine('');
-  addLine('');
-  addLine('');
-  addLine('');
-  addLine('');
-  addCmd(CMD.FEED_5);
+  addCmd(CMD.FEED_3);
   addCmd(CMD.PARTIAL_CUT);
 
   await sendDataToTarget('cashier', data);

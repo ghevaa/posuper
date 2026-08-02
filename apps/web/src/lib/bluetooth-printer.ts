@@ -18,7 +18,7 @@ const CMD = {
   FONT_NORMAL: new Uint8Array([ESC, 0x21, 0x00]),       // Normal size
   FONT_DOUBLE_H: new Uint8Array([ESC, 0x21, 0x10]),     // Double height
   FONT_DOUBLE: new Uint8Array([ESC, 0x21, 0x30]),       // Double width+height
-  SET_LINE_SPACING_LARGE: new Uint8Array([ESC, 0x33, 40]), // Spacious line spacing (40 dots)
+  SET_LINE_SPACING_COMPACT: new Uint8Array([ESC, 0x33, 26]), // Compact line spacing (26 dots)
   CUT: new Uint8Array([GS, 0x56, 0x00]),                // Full cut
   PARTIAL_CUT: new Uint8Array([GS, 0x56, 0x01]),        // Partial cut
   FEED_3: new Uint8Array([ESC, 0x64, 0x03]),            // Feed 3 lines
@@ -289,10 +289,9 @@ export async function printReceipt(receipt: ReceiptData): Promise<void> {
 
   // Init & Line Spacing
   lines.push(CMD.INIT);
-  lines.push(CMD.SET_LINE_SPACING_LARGE);
+  lines.push(CMD.SET_LINE_SPACING_COMPACT);
 
   // Top margin feed
-  addLine('');
   addLine('');
 
   // Store header
@@ -319,7 +318,6 @@ export async function printReceipt(receipt: ReceiptData): Promise<void> {
     addLine(`Tipe   : ${orderLabel}`);
   }
   addLine(dashLine());
-  addLine('');
 
   // Items
   for (const item of receipt.items) {
@@ -337,7 +335,6 @@ export async function printReceipt(receipt: ReceiptData): Promise<void> {
     if (item.note) {
       addLine(`   Catatan: ${item.note}`);
     }
-    addLine('');
   }
 
   addLine(dashLine());
@@ -372,18 +369,11 @@ export async function printReceipt(receipt: ReceiptData): Promise<void> {
   addLine('Selamat Menikmati');
   addLine(doubleLine());
 
-  // 10 Extra Feed Lines so text is pushed completely past the printer tear bar
+  // 3 Feed Lines to push text past tear bar cleanly
   addLine('');
   addLine('');
   addLine('');
-  addLine('');
-  addLine('');
-  addLine('');
-  addLine('');
-  addLine('');
-  addLine('');
-  addLine('');
-  lines.push(CMD.FEED_5);
+  lines.push(CMD.FEED_3);
   lines.push(CMD.PARTIAL_CUT);
 
   const receiptData = concat(...lines);
@@ -415,10 +405,9 @@ export async function printKitchenTicket(data: KitchenTicketData): Promise<void>
   };
 
   lines.push(CMD.INIT);
-  lines.push(CMD.SET_LINE_SPACING_LARGE);
+  lines.push(CMD.SET_LINE_SPACING_COMPACT);
 
   // Top margin feed
-  addLine('');
   addLine('');
 
   lines.push(CMD.ALIGN_CENTER);
@@ -440,7 +429,6 @@ export async function printKitchenTicket(data: KitchenTicketData): Promise<void>
     addLine(`Kasir  : ${data.cashierName}`);
   }
   addLine(dashLine());
-  addLine('');
 
   // Kitchen items in large text
   lines.push(CMD.BOLD_ON);
@@ -452,7 +440,6 @@ export async function printKitchenTicket(data: KitchenTicketData): Promise<void>
     if (item.note) {
       addLine(`   * Catatan: ${item.note}`);
     }
-    addLine('');
   }
   lines.push(CMD.BOLD_OFF);
 
@@ -461,18 +448,11 @@ export async function printKitchenTicket(data: KitchenTicketData): Promise<void>
   addLine('--- SOBEK DI SINI ---');
   addLine(doubleLine());
 
-  // 10 Extra Feed Lines so text is pushed completely past the printer tear bar
+  // 3 Feed Lines to push text past tear bar
   addLine('');
   addLine('');
   addLine('');
-  addLine('');
-  addLine('');
-  addLine('');
-  addLine('');
-  addLine('');
-  addLine('');
-  addLine('');
-  lines.push(CMD.FEED_5);
+  lines.push(CMD.FEED_3);
   lines.push(CMD.PARTIAL_CUT);
 
   const ticketData = concat(...lines);
@@ -512,9 +492,8 @@ export async function printClosingReport(report: ClosingReportData): Promise<voi
   };
 
   lines.push(CMD.INIT);
-  lines.push(CMD.SET_LINE_SPACING_LARGE);
+  lines.push(CMD.SET_LINE_SPACING_COMPACT);
 
-  addLine('');
   addLine('');
 
   lines.push(CMD.ALIGN_CENTER);
@@ -535,7 +514,6 @@ export async function printClosingReport(report: ClosingReportData): Promise<voi
     hour: '2-digit', minute: '2-digit',
   })}`);
   addLine(dashLine());
-  addLine('');
 
   lines.push(CMD.BOLD_ON);
   addLine(padLine('TOTAL OMSET', formatCurrency(report.totalOmset)));
@@ -562,14 +540,7 @@ export async function printClosingReport(report: ClosingReportData): Promise<voi
   addLine('');
   addLine('');
   addLine('');
-  addLine('');
-  addLine('');
-  addLine('');
-  addLine('');
-  addLine('');
-  addLine('');
-  addLine('');
-  lines.push(CMD.FEED_5);
+  lines.push(CMD.FEED_3);
   lines.push(CMD.PARTIAL_CUT);
 
   const reportData = concat(...lines);

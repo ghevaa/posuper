@@ -16,6 +16,7 @@ import { Wifi, WifiOff, RefreshCw } from 'lucide-react';
 const cashierLinks = [
   { to: '/pos', icon: ShoppingCart, label: 'POS' },
   { to: '/pos/history', icon: Clock, label: 'Riwayat Hari Ini' },
+  { to: '/pos/settings', icon: Settings, label: 'Pengaturan Printer' },
 ];
 
 const adminLinks = [

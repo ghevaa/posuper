@@ -87,6 +87,14 @@ export default function App() {
           {/* Cashier routes */}
           <Route path="pos" element={<POSPage />} />
           <Route path="pos/history" element={<POSHistoryPage />} />
+          <Route
+            path="pos/settings"
+            element={
+              <ProtectedRoute allowedRoles={['cashier', 'admin', 'developer']}>
+                <DevSettings />
+              </ProtectedRoute>
+            }
+          />
 
           {/* Admin routes */}
           <Route
