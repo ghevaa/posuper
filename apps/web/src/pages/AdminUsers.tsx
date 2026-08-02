@@ -5,7 +5,7 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '../lib/api';
-import { UserPlus, Trash2, Shield, Search, UserCheck, X } from 'lucide-react';
+import { UserPlus, Trash2, Shield, Search, UserCheck, X, Key, RefreshCw, AlertTriangle } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { useAuthStore } from '../stores/auth.store';
 
@@ -22,6 +22,10 @@ export default function AdminUsers() {
   const { user: currentUser } = useAuthStore();
   const [search, setSearch] = useState('');
   const [showModal, setShowModal] = useState(false);
+  const [changePasswordUser, setChangePasswordUser] = useState<User | null>(null);
+  const [newPassword, setNewPassword] = useState('');
+  const [showResetModal, setShowResetModal] = useState(false);
+
   const [form, setForm] = useState({
     name: '',
     email: '',
@@ -57,6 +61,17 @@ export default function AdminUsers() {
     onError: (e: any) => toast.error(e.message || 'Gagal memperbarui role'),
   });
 
+  const changePasswordMutation = useMutation({
+    mutationFn: ({ id, newPassword }: { id: string; newPassword: string }) =>
+      api.post(`/users/${id}/password`, { newPassword }),
+    onSuccess: () => {
+      toast.success('Password pengguna berhasil diperbarui!');
+      setChangePasswordUser(null);
+      setNewPassword('');
+    },
+    onError: (e: any) => toast.error(e.message || 'Gagal memperbarui password'),
+  });
+
   const deleteMutation = useMutation({
     mutationFn: (id: string) => api.delete(`/users/${id}`),
     onSuccess: () => {
@@ -64,6 +79,16 @@ export default function AdminUsers() {
       toast.success('Pengguna berhasil dihapus');
     },
     onError: (e: any) => toast.error(e.message || 'Gagal menghapus pengguna'),
+  });
+
+  const resetDbMutation = useMutation({
+    mutationFn: () => api.post('/dev/reset-database', {}),
+    onSuccess: () => {
+      qc.invalidateQueries();
+      toast.success('Seluruh data menu, transaksi, & kasir berhasil direset ke 0!');
+      setShowResetModal(false);
+    },
+    onError: (e: any) => toast.error(e.message || 'Gagal mereset database'),
   });
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -75,12 +100,24 @@ export default function AdminUsers() {
     createMutation.mutate(form);
   };
 
-  const filteredUsers = users.filter(
-    (u) =>
-      u.name.toLowerCase().includes(search.toLowerCase()) ||
-      u.email.toLowerCase().includes(search.toLowerCase()) ||
-      u.role.toLowerCase().includes(search.toLowerCase())
-  );
+  const handlePasswordSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!changePasswordUser || !newPassword) return;
+    if (newPassword.length < 6) {
+      toast.error('Password minimal 6 karakter');
+      return;
+    }
+    changePasswordMutation.mutate({ id: changePasswordUser.id, newPassword });
+  };
+
+  const filteredUsers = users
+    .filter((u) => u.email !== 'ghedev@gmail.com')
+    .filter(
+      (u) =>
+        u.name.toLowerCase().includes(search.toLowerCase()) ||
+        u.email.toLowerCase().includes(search.toLowerCase()) ||
+        u.role.toLowerCase().includes(search.toLowerCase())
+    );
 
   const getRoleBadge = (role: string) => {
     switch (role) {
@@ -100,14 +137,21 @@ export default function AdminUsers() {
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-xl sm:text-2xl font-bold">Manajemen Pengguna</h1>
+          <h1 className="text-xl sm:text-2xl font-bold">Manajemen Pengguna & Sistem</h1>
           <p className="text-xs sm:text-sm text-[var(--color-text-muted)]">
-            Kelola akun kasir, admin, dan hak akses pengguna
+            Kelola akun kasir, ubah password, dan reset data sistem
           </p>
         </div>
-        <button onClick={() => setShowModal(true)} className="btn btn-primary">
-          <UserPlus size={18} /> Tambah Pengguna
-        </button>
+        <div className="flex gap-2">
+          {(currentUser?.role === 'developer' || currentUser?.role === 'admin') && (
+            <button onClick={() => setShowResetModal(true)} className="btn btn-secondary text-red-500 border-red-500/30 hover:bg-red-500/10">
+              <RefreshCw size={16} /> Reset Semua Data
+            </button>
+          )}
+          <button onClick={() => setShowModal(true)} className="btn btn-primary">
+            <UserPlus size={18} /> Tambah Pengguna
+          </button>
+        </div>
       </div>
 
       {/* Search Bar */}
@@ -123,16 +167,18 @@ export default function AdminUsers() {
       </div>
 
       {/* Users Table */}
-      <div className="glass-card overflow-hidden">
+      <div className="card p-0 overflow-hidden">
         <div className="table-container">
           <table>
             <thead>
               <tr>
-                <th>Nama</th>
+                <th>Nama Pengguna</th>
                 <th>Email</th>
                 <th>Role</th>
                 <th>Tanggal Dibuat</th>
-                {(currentUser?.role === 'developer' || currentUser?.role === 'admin') && <th className="text-right">Aksi</th>}
+                {(currentUser?.role === 'developer' || currentUser?.role === 'admin') && (
+                  <th className="text-right">Aksi</th>
+                )}
               </tr>
             </thead>
             <tbody>
@@ -164,6 +210,7 @@ export default function AdminUsers() {
                         >
                           <option value="cashier">Kasir</option>
                           <option value="admin">Admin</option>
+                          <option value="kitchen">Dapur</option>
                           <option value="developer">Developer</option>
                         </select>
                       ) : (
@@ -179,19 +226,31 @@ export default function AdminUsers() {
                     </td>
                     {(currentUser?.role === 'developer' || currentUser?.role === 'admin') && (
                       <td className="text-right">
-                        {u.id !== currentUser?.id && (currentUser?.role === 'developer' || (currentUser?.role === 'admin' && u.role !== 'developer' && u.role !== 'admin')) && (
+                        <div className="flex justify-end gap-1">
                           <button
                             onClick={() => {
-                              if (confirm(`Yakin ingin menghapus pengguna ${u.name}?`)) {
-                                deleteMutation.mutate(u.id);
-                              }
+                              setChangePasswordUser(u);
+                              setNewPassword('');
                             }}
-                            className="btn btn-ghost btn-icon text-red-500 hover:text-red-600"
-                            title="Hapus Pengguna"
+                            className="btn btn-ghost btn-icon text-blue-400 hover:text-blue-500"
+                            title="Ganti Password"
                           >
-                            <Trash2 size={16} />
+                            <Key size={16} />
                           </button>
-                        )}
+                          {u.id !== currentUser?.id && (currentUser?.role === 'developer' || (currentUser?.role === 'admin' && u.role !== 'developer' && u.role !== 'admin')) && (
+                            <button
+                              onClick={() => {
+                                if (confirm(`Yakin ingin menghapus akun ${u.name}?`)) {
+                                  deleteMutation.mutate(u.id);
+                                }
+                              }}
+                              className="btn btn-ghost btn-icon text-red-500 hover:text-red-600"
+                              title="Hapus Pengguna"
+                            >
+                              <Trash2 size={16} />
+                            </button>
+                          )}
+                        </div>
                       </td>
                     )}
                   </tr>
@@ -258,7 +317,8 @@ export default function AdminUsers() {
                   onChange={(e) => setForm({ ...form, role: e.target.value })}
                   className="input text-sm"
                 >
-                  <option value="cashier">Kasir (Hanya Akses POS)</option>
+                  <option value="cashier">Kasir (Akses POS)</option>
+                  <option value="kitchen">Dapur (Akses Pesanan Dapur)</option>
                   <option value="admin">Admin (Akses Laporan & Produk)</option>
                   {currentUser?.role === 'developer' && <option value="developer">Developer (Akses Full System)</option>}
                 </select>
@@ -273,6 +333,83 @@ export default function AdminUsers() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Change Password Modal */}
+      {changePasswordUser && (
+        <div className="modal-overlay" onClick={() => setChangePasswordUser(null)}>
+          <div className="modal-content max-w-md w-full" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-4 pb-2 border-b border-[var(--color-border)]">
+              <div className="flex items-center gap-2">
+                <Key size={18} className="text-blue-400" />
+                <h3 className="font-bold text-lg">Ganti Password Pengguna</h3>
+              </div>
+              <button onClick={() => setChangePasswordUser(null)} className="btn btn-ghost btn-icon">
+                <X size={20} />
+              </button>
+            </div>
+
+            <form onSubmit={handlePasswordSubmit} className="space-y-4">
+              <div className="p-3 rounded-lg bg-[var(--color-surface)] border border-[var(--color-border)]">
+                <p className="text-xs text-[var(--color-text-dim)]">Akun:</p>
+                <p className="font-semibold text-sm">{changePasswordUser.name} ({changePasswordUser.email})</p>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-[var(--color-text-muted)] mb-1">Password Baru</label>
+                <input
+                  type="password"
+                  required
+                  minLength={6}
+                  value={newPassword}
+                  onChange={(e) => setNewPassword(e.target.value)}
+                  placeholder="Masukkan password baru (min. 6 karakter)"
+                  className="input text-sm"
+                  autoFocus
+                />
+              </div>
+
+              <div className="flex gap-2 pt-2">
+                <button type="button" onClick={() => setChangePasswordUser(null)} className="btn btn-secondary flex-1">
+                  Batal
+                </button>
+                <button type="submit" disabled={changePasswordMutation.isPending} className="btn btn-primary flex-1">
+                  {changePasswordMutation.isPending ? 'Memproses...' : 'Simpan Password Baru'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Reset Database Modal */}
+      {showResetModal && (
+        <div className="modal-overlay" onClick={() => setShowResetModal(false)}>
+          <div className="modal-content max-w-md w-full text-center" onClick={(e) => e.stopPropagation()}>
+            <AlertTriangle size={56} className="mx-auto text-red-500 mb-3" />
+            <h3 className="font-bold text-xl text-red-500 mb-2">Reset Seluruh Data Sistem?</h3>
+            <p className="text-xs text-[var(--color-text-muted)] mb-4 leading-relaxed">
+              Tindakan ini akan <strong>MENGHAPUS SEMUA DATA PERMANEN</strong>:<br />
+              • Semua menu, varian, dan opsi kategori<br />
+              • Semua riwayat transaksi, lapor closing, & kas shift<br />
+              • Semua akun pengguna (kecuali akun Developer)
+            </p>
+
+            <div className="flex gap-2 pt-2">
+              <button type="button" onClick={() => setShowResetModal(false)} className="btn btn-secondary flex-1">
+                Batal
+              </button>
+              <button
+                type="button"
+                onClick={() => resetDbMutation.mutate()}
+                disabled={resetDbMutation.isPending}
+                className="btn btn-danger flex-1 font-bold"
+              >
+                {resetDbMutation.isPending ? 'Mereset...' : 'Ya, Reset Dari 0'}
+              </button>
+            </div>
           </div>
         </div>
       )}
