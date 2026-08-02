@@ -117,21 +117,7 @@ export default function AdminStockOpname() {
   // Export Excel
   const handleExport = async (id: string) => {
     try {
-      const token = localStorage.getItem('pos_yoga_session_token');
-      const IS_TAURI = !!(window as any).__TAURI_INTERNALS__;
-      const BASE_URL = IS_TAURI ? 'http://72.61.214.92:8080' : '';
-      const res = await fetch(`${BASE_URL}/api/stock-opname/${id}/export`, {
-        credentials: 'include',
-        headers: token ? { 'Authorization': `Bearer ${token}` } : {},
-      });
-      if (!res.ok) throw new Error('Gagal export');
-      const blob = await res.blob();
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `stok-opname-${id}.xlsx`;
-      a.click();
-      URL.revokeObjectURL(url);
+      await api.downloadFile(`/stock-opname/${id}/export`, `stok-opname-${id}.xlsx`);
       toast.success('File Excel berhasil diunduh');
     } catch (err: any) {
       toast.error(err.message || 'Gagal export Excel');

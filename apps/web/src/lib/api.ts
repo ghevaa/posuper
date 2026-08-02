@@ -94,6 +94,37 @@ export const api = {
 
   delete: <T>(url: string) =>
     request<T>(url, { method: 'DELETE' }),
+
+  downloadFile: async (url: string, defaultFilename: string): Promise<void> => {
+    let fullUrl = `${BASE_URL}${API_BASE}${url}`;
+
+    const headers: Record<string, string> = {};
+    const token = getStoredToken();
+    if (IS_NATIVE && token) {
+      headers['Authorization'] = `Bearer ${token}`;
+    }
+
+    const res = await fetch(fullUrl, {
+      method: 'GET',
+      headers,
+      credentials: 'include',
+    });
+
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ error: 'Gagal mengunduh berkas (HTTP ' + res.status + ')' }));
+      throw new Error(err.error || err.message || `HTTP ${res.status}`);
+    }
+
+    const blob = await res.blob();
+    const blobUrl = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = blobUrl;
+    a.download = defaultFilename;
+    document.body.appendChild(a);
+    a.click();
+    window.URL.revokeObjectURL(blobUrl);
+    a.remove();
+  },
 };
 
 // --- Auth API ---

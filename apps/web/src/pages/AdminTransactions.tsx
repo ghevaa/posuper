@@ -27,21 +27,7 @@ export default function AdminTransactions() {
   const handleExportExcel = async () => {
     setExporting(true);
     try {
-      const res = await fetch('/api/export/transactions', {
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token') || ''}`,
-        },
-      });
-      if (!res.ok) throw new Error('Gagal mengunduh Excel');
-      const blob = await res.blob();
-      const url = window.URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `transaksi_${new Date().toISOString().slice(0, 10)}.xlsx`;
-      document.body.appendChild(a);
-      a.click();
-      window.URL.revokeObjectURL(url);
-      a.remove();
+      await api.downloadFile('/export/transactions', `transaksi_${new Date().toISOString().slice(0, 10)}.xlsx`);
       toast.success('File Excel transaksi berhasil diunduh!');
     } catch (err: any) {
       toast.error(err.message || 'Gagal export data transaksi');

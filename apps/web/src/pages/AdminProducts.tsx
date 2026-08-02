@@ -33,21 +33,7 @@ export default function AdminProducts() {
   const handleExportExcel = async () => {
     setExporting(true);
     try {
-      const res = await fetch('/api/export/menu', {
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token') || ''}`,
-        },
-      });
-      if (!res.ok) throw new Error('Gagal mengunduh Excel');
-      const blob = await res.blob();
-      const url = window.URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `menu_produk.xlsx`;
-      document.body.appendChild(a);
-      a.click();
-      window.URL.revokeObjectURL(url);
-      a.remove();
+      await api.downloadFile('/export/menu', `menu_produk.xlsx`);
       toast.success('File Excel menu & varian berhasil diunduh!');
     } catch (err: any) {
       toast.error(err.message || 'Gagal export data menu');

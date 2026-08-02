@@ -34,21 +34,7 @@ export default function AdminExpenses() {
   const handleExportExcel = async () => {
     setExporting(true);
     try {
-      const res = await fetch('/api/export/expenses', {
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token') || ''}`,
-        },
-      });
-      if (!res.ok) throw new Error('Gagal mengunduh Excel');
-      const blob = await res.blob();
-      const url = window.URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `pengeluaran_${new Date().toISOString().slice(0, 10)}.xlsx`;
-      document.body.appendChild(a);
-      a.click();
-      window.URL.revokeObjectURL(url);
-      a.remove();
+      await api.downloadFile('/export/expenses', `pengeluaran_${new Date().toISOString().slice(0, 10)}.xlsx`);
       toast.success('File Excel pengeluaran berhasil diunduh!');
     } catch (err: any) {
       toast.error(err.message || 'Gagal export data pengeluaran');
