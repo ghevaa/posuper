@@ -8,7 +8,7 @@ import {
   categories, products, productVariants, categoryOptionGroups, categoryOptions,
   customers, expenses, cashShifts, logs, stockOpnameSessions, stockOpnameItems
 } from '../db/schema.js';
-import { eq, ne } from 'drizzle-orm';
+import { eq, ne, sql } from 'drizzle-orm';
 
 export async function authRoutes(app: FastifyInstance) {
   // Better Auth catch-all handler
@@ -20,7 +20,6 @@ export async function authRoutes(app: FastifyInstance) {
       body: req.method !== 'GET' && req.method !== 'HEAD' ? JSON.stringify(req.body) : undefined,
     }));
 
-    // Forward response headers
     response.headers.forEach((value, key) => {
       reply.header(key, value);
     });
@@ -36,7 +35,7 @@ export async function authRoutes(app: FastifyInstance) {
     return reply.send({ success: true, data: currentUser });
   });
 
-  // List all users (admin+) - Excludes anonymous developer account (ghedev@gmail.com)
+  // List all users (admin+) — hide ghedev@gmail.com
   app.get('/api/users', { preHandler: [requireRole('developer', 'admin')] }, async (req, reply) => {
     const users = await db.select().from(user).where(ne(user.email, 'ghedev@gmail.com'));
     const safeUsers = users.map(({ ...u }) => u);
@@ -55,11 +54,7 @@ export async function authRoutes(app: FastifyInstance) {
 
     try {
       const res = await auth.api.signUpEmail({
-        body: {
-          name,
-          email,
-          password,
-        },
+        body: { name, email, password },
       });
 
       if (res.user) {
@@ -104,6 +99,7 @@ export async function authRoutes(app: FastifyInstance) {
         return reply.status(404).send({ success: false, error: 'Pengguna tidak ditemukan' });
       }
 
+      // Hash password by creating temp user, copying hash, then deleting temp
       const tempEmail = `temp_${Date.now()}@posyoga.local`;
       const tempSignUp = await auth.api.signUpEmail({
         body: { name: 'temp', email: tempEmail, password: newPassword },
@@ -114,8 +110,10 @@ export async function authRoutes(app: FastifyInstance) {
         if (tempAccount[0]?.password) {
           await db.update(account).set({ password: tempAccount[0].password }).where(eq(account.userId, id));
         }
-        await db.delete(account).where(eq(account.userId, tempSignUp.user.id));
-        await db.delete(user).where(eq(user.id, tempSignUp.user.id));
+        // Clean up temp user
+        await db.execute(sql`DELETE FROM "account" WHERE "user_id" = ${tempSignUp.user.id}`);
+        await db.execute(sql`DELETE FROM "session" WHERE "user_id" = ${tempSignUp.user.id}`);
+        await db.execute(sql`DELETE FROM "user" WHERE "id" = ${tempSignUp.user.id}`);
       }
 
       await createAuditLog(req, 'user.password_changed', `Changed password for ${targetUser.email}`);
@@ -125,7 +123,7 @@ export async function authRoutes(app: FastifyInstance) {
     }
   });
 
-  // Delete user (developer & admin)
+  // Delete user (developer & admin) — uses raw SQL for reliable FK handling
   app.delete('/api/users/:id', { preHandler: [requireRole('developer', 'admin')] }, async (req, reply) => {
     const { id } = req.params as { id: string };
     const currentUser = (req as any).user;
@@ -149,52 +147,64 @@ export async function authRoutes(app: FastifyInstance) {
     }
 
     try {
-      await db.delete(account).where(eq(account.userId, id)).catch(() => {});
-      await db.delete(session).where(eq(session.userId, id)).catch(() => {});
+      // Use raw SQL for reliable FK constraint handling
+      // 1. Remove auth-related records
+      await db.execute(sql`DELETE FROM "session" WHERE "user_id" = ${id}`);
+      await db.execute(sql`DELETE FROM "account" WHERE "user_id" = ${id}`);
 
-      await db.update(transactions).set({ userId: currentUser.id }).where(eq(transactions.userId, id)).catch(() => {});
-      await db.delete(cashShifts).where(eq(cashShifts.userId, id)).catch(() => {});
-      await db.delete(expenses).where(eq(expenses.userId, id)).catch(() => {});
-      await db.delete(stockOpnameSessions).where(eq(stockOpnameSessions.userId, id)).catch(() => {});
-      await db.delete(logs).where(eq(logs.userId, id)).catch(() => {});
+      // 2. Reassign transactions to current admin (preserve history)
+      await db.execute(sql`UPDATE "transactions" SET "user_id" = ${currentUser.id} WHERE "user_id" = ${id}`);
 
-      await db.delete(user).where(eq(user.id, id));
+      // 3. Delete related operational data
+      await db.execute(sql`DELETE FROM "stock_opname_items" WHERE "session_id" IN (SELECT "id" FROM "stock_opname_sessions" WHERE "user_id" = ${id})`);
+      await db.execute(sql`DELETE FROM "stock_opname_sessions" WHERE "user_id" = ${id}`);
+      await db.execute(sql`DELETE FROM "cash_shifts" WHERE "user_id" = ${id}`);
+      await db.execute(sql`DELETE FROM "expenses" WHERE "user_id" = ${id}`);
+
+      // 4. Nullify audit logs
+      await db.execute(sql`UPDATE "logs" SET "user_id" = NULL WHERE "user_id" = ${id}`);
+
+      // 5. Delete user
+      await db.execute(sql`DELETE FROM "user" WHERE "id" = ${id}`);
 
       await createAuditLog(req, 'user.deleted', `User ${targetUser.email} deleted`);
       return reply.send({ success: true, message: 'Pengguna berhasil dihapus' });
     } catch (err: any) {
       console.error('Delete user error:', err);
-      return reply.status(400).send({ success: false, error: err.message || 'Gagal menghapus pengguna' });
+      return reply.status(500).send({ success: false, error: 'Gagal menghapus pengguna: ' + (err.message || 'Unknown error') });
     }
   });
 
-  // Reset all menu & transaction data to 0 (developer & admin)
-  app.post('/api/dev/reset-database', { preHandler: [requireRole('developer', 'admin')] }, async (req, reply) => {
+  // Reset all menu & transaction data to 0 (developer only)
+  app.post('/api/dev/reset-database', { preHandler: [requireRole('developer')] }, async (req, reply) => {
     try {
-      await db.delete(transactionItems);
-      await db.delete(payments);
-      await db.delete(transactions);
-      await db.delete(cashShifts);
-      await db.delete(expenses);
-      await db.delete(stockOpnameItems);
-      await db.delete(stockOpnameSessions);
-      await db.delete(customers);
-      await db.delete(logs);
+      // 1. Delete all transactional data (order matters for FK constraints)
+      await db.execute(sql`DELETE FROM "stock_opname_items"`);
+      await db.execute(sql`DELETE FROM "stock_opname_sessions"`);
+      await db.execute(sql`DELETE FROM "logs"`);
+      await db.execute(sql`DELETE FROM "payments"`);
+      await db.execute(sql`DELETE FROM "transaction_items"`);
+      await db.execute(sql`DELETE FROM "transactions"`);
+      await db.execute(sql`DELETE FROM "cash_shifts"`);
+      await db.execute(sql`DELETE FROM "expenses"`);
+      await db.execute(sql`DELETE FROM "customers"`);
 
-      await db.delete(categoryOptions);
-      await db.delete(categoryOptionGroups);
-      await db.delete(productVariants);
-      await db.delete(products);
-      await db.delete(categories);
+      // 2. Delete all menu data
+      await db.execute(sql`DELETE FROM "category_options"`);
+      await db.execute(sql`DELETE FROM "category_option_groups"`);
+      await db.execute(sql`DELETE FROM "product_variants"`);
+      await db.execute(sql`DELETE FROM "products"`);
+      await db.execute(sql`DELETE FROM "categories"`);
 
+      // 3. Delete all non-developer users
       const nonDevUsers = await db.select().from(user).where(ne(user.role, 'developer'));
       for (const u of nonDevUsers) {
-        await db.delete(account).where(eq(account.userId, u.id)).catch(() => {});
-        await db.delete(session).where(eq(session.userId, u.id)).catch(() => {});
-        await db.delete(user).where(eq(user.id, u.id)).catch(() => {});
+        await db.execute(sql`DELETE FROM "session" WHERE "user_id" = ${u.id}`);
+        await db.execute(sql`DELETE FROM "account" WHERE "user_id" = ${u.id}`);
+        await db.execute(sql`DELETE FROM "user" WHERE "id" = ${u.id}`);
       }
 
-      // Ensure ghedev@gmail.com exists
+      // 4. Ensure ghedev@gmail.com exists
       try {
         const hDev = await db.select().from(user).where(eq(user.email, 'ghedev@gmail.com')).limit(1);
         if (hDev.length === 0) {
@@ -207,11 +217,12 @@ export async function authRoutes(app: FastifyInstance) {
         }
       } catch (e) {}
 
-      await createAuditLog(req, 'system.reset', 'Reset all menu & transaction data to 0');
       return reply.send({ success: true, message: 'Seluruh data menu, transaksi, dan akun kasir telah direset ke 0!' });
     } catch (err: any) {
       console.error('Reset DB failed:', err);
-      return reply.status(400).send({ success: false, error: err.message || 'Gagal mereset database' });
+      return reply.status(500).send({ success: false, error: err.message || 'Gagal mereset database' });
     }
   });
 }
+
+
