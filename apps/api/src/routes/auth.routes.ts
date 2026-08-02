@@ -7,7 +7,7 @@ import { auth } from '../auth.js';
 import { requireAuth, requireRole } from '../middleware/auth.middleware.js';
 import { createAuditLog } from '../middleware/logger.middleware.js';
 import { db } from '../db/index.js';
-import { user } from '../db/schema.js';
+import { user, account, session } from '../db/schema.js';
 import { eq } from 'drizzle-orm';
 
 export async function authRoutes(app: FastifyInstance) {
@@ -88,7 +88,7 @@ export async function authRoutes(app: FastifyInstance) {
     return reply.send({ success: true, message: 'Role updated' });
   });
 
-import { account, session, user } from '../db/schema.js';
+
 
   // Delete user (developer & admin)
   app.delete('/api/users/:id', { preHandler: [requireRole('developer', 'admin')] }, async (req, reply) => {
