@@ -289,10 +289,11 @@ export async function nativePrintReceipt(receipt: ReceiptData): Promise<void> {
   }).replace(':', '.');
   addLine(`Tgl: ${dateStr} ${timeStr}`);
 
-  if (receipt.orderType) {
-    const orderLabel = receipt.orderType === 'take_away' ? 'Bawa Pulang' : `Makan di Tempat${receipt.tableNo ? ` (Meja ${receipt.tableNo})` : ''}`;
-    addLine(`Tipe: ${orderLabel}`);
-  }
+  const oType = receipt.orderType || 'dine_in';
+  const orderLabel = oType === 'take_away'
+    ? 'Take Away (Bawa Pulang)'
+    : `Dine In${receipt.tableNo ? ` (Meja ${receipt.tableNo})` : ''}`;
+  addLine(`Tipe: ${orderLabel}`);
   addLine(dashLine());
 
   // Items
