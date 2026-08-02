@@ -6,10 +6,12 @@ import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { api } from '../lib/api';
 import { formatCurrency, formatDateTime } from '../lib/utils';
-import { Eye, X } from 'lucide-react';
+import { Eye, X, Download, Loader2 } from 'lucide-react';
+import toast from 'react-hot-toast';
 
 export default function AdminTransactions() {
   const [detail, setDetail] = useState<any>(null);
+  const [exporting, setExporting] = useState(false);
   const { data, isLoading } = useQuery({
     queryKey: ['transactions'],
     queryFn: () => api.get<{ data: any[] }>('/transactions'),
@@ -22,9 +24,48 @@ export default function AdminTransactions() {
     setDetail(res.data);
   };
 
+  const handleExportExcel = async () => {
+    setExporting(true);
+    try {
+      const res = await fetch('/api/export/transactions', {
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('token') || ''}`,
+        },
+      });
+      if (!res.ok) throw new Error('Gagal mengunduh Excel');
+      const blob = await res.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `transaksi_${new Date().toISOString().slice(0, 10)}.xlsx`;
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      a.remove();
+      toast.success('File Excel transaksi berhasil diunduh!');
+    } catch (err: any) {
+      toast.error(err.message || 'Gagal export data transaksi');
+    } finally {
+      setExporting(false);
+    }
+  };
+
   return (
     <div className="space-y-6">
-      <div><h1 className="text-2xl font-bold">Transaksi</h1><p className="text-sm text-[var(--color-text-muted)]">Riwayat transaksi</p></div>
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+        <div>
+          <h1 className="text-2xl font-bold">Transaksi</h1>
+          <p className="text-sm text-[var(--color-text-muted)]">Riwayat transaksi & detail penjualan</p>
+        </div>
+        <button
+          onClick={handleExportExcel}
+          disabled={exporting}
+          className="btn btn-primary gap-2 font-bold"
+        >
+          {exporting ? <Loader2 size={16} className="animate-spin" /> : <Download size={16} />}
+          Export Excel Transaksi
+        </button>
+      </div>
       <div className="table-container">
         <table>
           <thead><tr><th>Invoice</th><th>Tanggal</th><th>Total</th><th>Bayar</th><th>Kembalian</th><th>Status</th><th>Aksi</th></tr></thead>

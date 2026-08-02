@@ -463,13 +463,6 @@ export async function printKitchenTicket(data: KitchenTicketData): Promise<void>
   addLine('--- SOBEK DI SINI ---');
   addLine(doubleLine());
 
-  // 3 Feed Lines to push text past tear bar
-  addLine('');
-  addLine('');
-  addLine('');
-  lines.push(CMD.FEED_3);
-  lines.push(CMD.PARTIAL_CUT);
-
   const ticketData = concat(...lines);
   await sendDataToTarget('kitchen', ticketData);
 }
@@ -486,13 +479,18 @@ export interface ClosingReportData {
   totalTransfer: number;
   totalNonCash: number;
   totalDiscount: number;
+  openAmount?: number;
+  totalExpenses?: number;
+  expectedAmount?: number;
+  closeAmount?: number;
+  difference?: number;
   paperSize?: '58mm' | '80mm';
 }
 
 export async function printClosingReport(report: ClosingReportData): Promise<void> {
   await ensureDesktopPrinterConnectedSlot('cashier');
 
-  const paperWidth = report.paperSize === '80mm' ? 48 : 32;
+  const paperWidth = (report.paperSize || '58mm') === '80mm' ? 48 : 32;
   const padLine = (left: string, right: string): string => {
     const spaces = paperWidth - left.length - right.length;
     return left + ' '.repeat(Math.max(1, spaces)) + right;
@@ -530,16 +528,39 @@ export async function printClosingReport(report: ClosingReportData): Promise<voi
   })}`);
   addLine(dashLine());
 
+  if (report.openAmount !== undefined) {
+    lines.push(CMD.BOLD_ON);
+    addLine('KAS DI LACI KASIR');
+    lines.push(CMD.BOLD_OFF);
+    addLine(padLine('Kas Awal', formatCurrency(report.openAmount || 0)));
+    addLine(padLine('Tunai (Masuk)', formatCurrency(report.totalCash || 0)));
+    if ((report.totalExpenses || 0) > 0) {
+      addLine(padLine('Pengeluaran (Tunai)', '-' + formatCurrency(report.totalExpenses || 0)));
+    }
+    lines.push(CMD.BOLD_ON);
+    addLine(padLine('Kas Diharapkan', formatCurrency(report.expectedAmount || 0)));
+    if (report.closeAmount !== undefined) {
+      addLine(padLine('Kas di Laci', formatCurrency(report.closeAmount || 0)));
+      const diff = report.difference || 0;
+      const diffLabel = diff > 0 ? 'Lebih' : diff < 0 ? 'Kurang' : 'Selisih';
+      addLine(padLine(diffLabel, (diff >= 0 ? '' : '-') + formatCurrency(Math.abs(diff))));
+    }
+    lines.push(CMD.BOLD_OFF);
+    addLine(dashLine());
+  }
+
   lines.push(CMD.BOLD_ON);
-  addLine(padLine('TOTAL OMSET', formatCurrency(report.totalOmset)));
+  addLine('IKHTISAR');
+  addLine(padLine('Total Penjualan', formatCurrency(report.totalOmset)));
   addLine(padLine('Total Transaksi', String(report.totalTxCount) + ' Tx'));
   lines.push(CMD.BOLD_OFF);
   addLine(dashLine());
 
-  addLine(padLine('Tunai (Cash)', formatCurrency(report.totalCash)));
+  addLine('RINCIAN PEMBAYARAN');
+  addLine(padLine('Tunai', formatCurrency(report.totalCash)));
   addLine(padLine('QRIS', formatCurrency(report.totalQris)));
   addLine(padLine('Bank Transfer', formatCurrency(report.totalTransfer)));
-  addLine(padLine('Total Non-Tunai', formatCurrency(report.totalNonCash)));
+  addLine(padLine('Non-Tunai', formatCurrency(report.totalNonCash)));
   addLine(dashLine());
 
   if (report.totalDiscount > 0) {
@@ -580,3 +601,4 @@ export async function testPrint(target: PrinterTarget = 'cashier'): Promise<void
 
   await sendDataToTarget(target, data);
 }
+

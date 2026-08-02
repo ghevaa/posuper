@@ -4,8 +4,8 @@
 
 import type { FastifyInstance } from 'fastify';
 import { db } from '../db/index.js';
-import { cashShifts, transactions } from '../db/schema.js';
-import { eq, and, gte, desc, sql } from 'drizzle-orm';
+import { cashShifts, transactions, expenses, user } from '../db/schema.js';
+import { eq, and, gte, lte, desc, sql } from 'drizzle-orm';
 import { nanoid } from 'nanoid';
 import { requireAuth } from '../middleware/auth.middleware.js';
 import { createAuditLog } from '../middleware/logger.middleware.js';
@@ -32,19 +32,98 @@ export async function shiftRoutes(app: FastifyInstance) {
       .limit(1);
 
     if (existing.length) {
-      return reply.status(400).send({ success: false, error: 'Shift already open' });
+      return reply.status(400).send({ success: false, error: 'Shift sudah terbuka', data: existing[0] });
     }
 
     const id = nanoid();
+    const openAmount = String(body.openAmount || 0);
     await db.insert(cashShifts).values({
       id,
       userId: currentUser.id,
-      openAmount: String(body.openAmount || 0),
+      openAmount,
       status: 'open',
     });
 
-    await createAuditLog(req, 'shift.opened', `Opening amount: ${body.openAmount || 0}`);
-    return reply.status(201).send({ success: true, data: { id } });
+    await createAuditLog(req, 'shift.opened', `Opening amount: ${openAmount}`);
+    return reply.status(201).send({ success: true, data: { id, openAmount } });
+  });
+
+  // Get active/current shift summary for closing modal
+  app.get('/api/shifts/current-summary', { preHandler: [requireAuth] }, async (req, reply) => {
+    const currentUser = (req as any).user;
+    const shift = await db.select().from(cashShifts)
+      .where(and(eq(cashShifts.userId, currentUser.id), eq(cashShifts.status, 'open')))
+      .limit(1);
+
+    const activeShift = shift[0];
+    const startedAt = activeShift ? activeShift.startedAt : new Date(new Date().setHours(0, 0, 0, 0));
+    const endedAt = new Date();
+
+    // Query transactions during shift
+    const txs = await db.select().from(transactions)
+      .where(and(
+        gte(transactions.createdAt, startedAt),
+        lte(transactions.createdAt, endedAt),
+        eq(transactions.status, 'completed'),
+        activeShift ? eq(transactions.userId, activeShift.userId) : sql`1=1`
+      ));
+
+    // Query expenses during shift
+    const exp = await db.select().from(expenses)
+      .where(and(
+        gte(expenses.date, startedAt),
+        lte(expenses.date, endedAt),
+        activeShift ? eq(expenses.userId, activeShift.userId) : sql`1=1`
+      ));
+
+    let totalSales = 0;
+    let totalCashSales = 0;
+    let totalQris = 0;
+    let totalTransfer = 0;
+    let totalNonCash = 0;
+    let totalTxCount = txs.length;
+
+    for (const t of txs) {
+      const amt = Number(t.total) || 0;
+      totalSales += amt;
+      if (t.paymentMethod === 'cash') {
+        totalCashSales += amt;
+      } else if (t.paymentMethod === 'qris') {
+        totalQris += amt;
+        totalNonCash += amt;
+      } else if (t.paymentMethod === 'transfer') {
+        totalTransfer += amt;
+        totalNonCash += amt;
+      } else {
+        totalNonCash += amt;
+      }
+    }
+
+    let totalExpenses = 0;
+    for (const e of exp) {
+      totalExpenses += Number(e.amount) || 0;
+    }
+
+    const openAmount = Number(activeShift?.openAmount || 0);
+    const expectedAmount = openAmount + totalCashSales - totalExpenses;
+
+    return reply.send({
+      success: true,
+      data: {
+        shiftId: activeShift?.id || null,
+        startedAt,
+        endedAt,
+        openAmount,
+        totalSales,
+        totalCashSales,
+        totalQris,
+        totalTransfer,
+        totalNonCash,
+        totalExpenses,
+        expectedAmount,
+        totalTxCount,
+      },
+    });
   });
 
   // Close shift
@@ -54,20 +133,44 @@ export async function shiftRoutes(app: FastifyInstance) {
 
     const shift = await db.select().from(cashShifts).where(eq(cashShifts.id, id)).limit(1);
     if (!shift.length || shift[0].status === 'closed') {
-      return reply.status(400).send({ success: false, error: 'Shift not found or already closed' });
+      return reply.status(400).send({ success: false, error: 'Shift tidak ditemukan atau sudah ditutup' });
     }
 
-    // Calculate expected amount from transactions during shift
-    const txSum = await db.select({
-      total: sql<string>`COALESCE(SUM(CAST(total AS DECIMAL)), 0)`,
-    }).from(transactions)
+    const currentShift = shift[0];
+    const endedAt = new Date();
+
+    // Sum transactions during shift
+    const txs = await db.select().from(transactions)
       .where(and(
-        gte(transactions.createdAt, shift[0].startedAt),
-        eq(transactions.userId, shift[0].userId),
-        eq(transactions.status, 'completed'),
+        gte(transactions.createdAt, currentShift.startedAt),
+        lte(transactions.createdAt, endedAt),
+        eq(transactions.userId, currentShift.userId),
+        eq(transactions.status, 'completed')
       ));
 
-    const expectedAmount = Number(shift[0].openAmount) + Number(txSum[0].total);
+    // Sum expenses during shift
+    const exp = await db.select().from(expenses)
+      .where(and(
+        gte(expenses.date, currentShift.startedAt),
+        lte(expenses.date, endedAt),
+        eq(expenses.userId, currentShift.userId)
+      ));
+
+    let totalCashSales = 0;
+    let totalSales = 0;
+    for (const t of txs) {
+      const amt = Number(t.total) || 0;
+      totalSales += amt;
+      if (t.paymentMethod === 'cash') totalCashSales += amt;
+    }
+
+    let totalExpenses = 0;
+    for (const e of exp) {
+      totalExpenses += Number(e.amount) || 0;
+    }
+
+    const openAmount = Number(currentShift.openAmount || 0);
+    const expectedAmount = openAmount + totalCashSales - totalExpenses;
     const closeAmount = Number(body.closeAmount || 0);
     const difference = closeAmount - expectedAmount;
 
@@ -75,17 +178,45 @@ export async function shiftRoutes(app: FastifyInstance) {
       closeAmount: String(closeAmount),
       expectedAmount: String(expectedAmount),
       difference: String(difference),
-      endedAt: new Date(),
+      endedAt,
       status: 'closed',
     }).where(eq(cashShifts.id, id));
 
-    await createAuditLog(req, 'shift.closed', `Expected: ${expectedAmount}, Actual: ${closeAmount}, Diff: ${difference}`);
-    return reply.send({ success: true, data: { expectedAmount, closeAmount, difference } });
+    await createAuditLog(req, 'shift.closed', `Open: ${openAmount}, Cash: ${totalCashSales}, Exp: ${totalExpenses}, Expected: ${expectedAmount}, Actual: ${closeAmount}, Diff: ${difference}`);
+    return reply.send({
+      success: true,
+      data: {
+        openAmount,
+        totalCashSales,
+        totalExpenses,
+        expectedAmount,
+        closeAmount,
+        difference,
+        endedAt,
+      },
+    });
   });
 
   // List shifts
   app.get('/api/shifts', { preHandler: [requireAuth] }, async (req, reply) => {
-    const all = await db.select().from(cashShifts).orderBy(desc(cashShifts.startedAt));
+    const all = await db.select({
+      id: cashShifts.id,
+      userId: cashShifts.userId,
+      userName: user.name,
+      userEmail: user.email,
+      openAmount: cashShifts.openAmount,
+      closeAmount: cashShifts.closeAmount,
+      expectedAmount: cashShifts.expectedAmount,
+      difference: cashShifts.difference,
+      startedAt: cashShifts.startedAt,
+      endedAt: cashShifts.endedAt,
+      status: cashShifts.status,
+    })
+      .from(cashShifts)
+      .leftJoin(user, eq(cashShifts.userId, user.id))
+      .orderBy(desc(cashShifts.startedAt));
+
     return reply.send({ success: true, data: all });
   });
 }
+

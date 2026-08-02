@@ -6,7 +6,7 @@ import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '../lib/api';
 import { formatCurrency, formatDate } from '../lib/utils';
-import { Plus, Trash2, X, Loader2 } from 'lucide-react';
+import { Plus, Trash2, X, Loader2, Download } from 'lucide-react';
 import toast from 'react-hot-toast';
 
 interface Expense {
@@ -20,6 +20,7 @@ interface Expense {
 
 export default function AdminExpenses() {
   const [showForm, setShowForm] = useState(false);
+  const [exporting, setExporting] = useState(false);
   const [form, setForm] = useState({ description: '', amount: '', date: new Date().toISOString().split('T')[0] });
 
   const qc = useQueryClient();
@@ -29,6 +30,32 @@ export default function AdminExpenses() {
   });
 
   const expenses = expRes?.data || [];
+
+  const handleExportExcel = async () => {
+    setExporting(true);
+    try {
+      const res = await fetch('/api/export/expenses', {
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('token') || ''}`,
+        },
+      });
+      if (!res.ok) throw new Error('Gagal mengunduh Excel');
+      const blob = await res.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `pengeluaran_${new Date().toISOString().slice(0, 10)}.xlsx`;
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      a.remove();
+      toast.success('File Excel pengeluaran berhasil diunduh!');
+    } catch (err: any) {
+      toast.error(err.message || 'Gagal export data pengeluaran');
+    } finally {
+      setExporting(false);
+    }
+  };
 
   const createMutation = useMutation({
     mutationFn: (data: any) => api.post('/expenses', data),
@@ -67,9 +94,19 @@ export default function AdminExpenses() {
           <h1 className="text-2xl font-bold">Pengeluaran</h1>
           <p className="text-sm text-[var(--color-text-muted)]">Catat biaya operasional toko</p>
         </div>
-        <button onClick={() => setShowForm(true)} className="btn btn-primary">
-          <Plus size={18} /> Catat Pengeluaran
-        </button>
+        <div className="flex gap-2">
+          <button
+            onClick={handleExportExcel}
+            disabled={exporting}
+            className="btn btn-secondary gap-2 font-bold"
+          >
+            {exporting ? <Loader2 size={16} className="animate-spin" /> : <Download size={16} />}
+            Export Excel
+          </button>
+          <button onClick={() => setShowForm(true)} className="btn btn-primary gap-2 font-bold">
+            <Plus size={18} /> Catat Pengeluaran
+          </button>
+        </div>
       </div>
 
       {/* Summary card */}

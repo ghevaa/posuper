@@ -6,7 +6,7 @@ import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '../lib/api';
 import { formatCurrency, getProductImageUrl } from '../lib/utils';
-import { Plus, Pencil, Trash2, X, Loader2 } from 'lucide-react';
+import { Plus, Pencil, Trash2, X, Loader2, Download } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { getLocalProducts, getLocalCategories, cacheProducts, cacheCategories } from '../lib/offline-db';
 
@@ -27,7 +27,34 @@ interface Category { id: string; name: string; }
 export default function AdminProducts() {
   const [showForm, setShowForm] = useState(false);
   const [editing, setEditing] = useState<Product | null>(null);
+  const [exporting, setExporting] = useState(false);
   const [form, setForm] = useState({ name: '', price: '', cost: '', stock: '', barcode: '', sku: '', categoryId: '', image: '' });
+
+  const handleExportExcel = async () => {
+    setExporting(true);
+    try {
+      const res = await fetch('/api/export/menu', {
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('token') || ''}`,
+        },
+      });
+      if (!res.ok) throw new Error('Gagal mengunduh Excel');
+      const blob = await res.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `menu_produk.xlsx`;
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      a.remove();
+      toast.success('File Excel menu & varian berhasil diunduh!');
+    } catch (err: any) {
+      toast.error(err.message || 'Gagal export data menu');
+    } finally {
+      setExporting(false);
+    }
+  };
   const [variants, setVariants] = useState<ProductVariant[]>([]);
   const [uploading, setUploading] = useState(false);
 
@@ -165,8 +192,18 @@ export default function AdminProducts() {
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <div><h1 className="text-2xl font-bold">Produk</h1><p className="text-sm text-[var(--color-text-muted)]">Kelola daftar produk</p></div>
-        <button onClick={openCreate} className="btn btn-primary"><Plus size={18} /> Tambah Produk</button>
+        <div><h1 className="text-2xl font-bold">Produk</h1><p className="text-sm text-[var(--color-text-muted)]">Kelola daftar produk & varian</p></div>
+        <div className="flex gap-2">
+          <button
+            onClick={handleExportExcel}
+            disabled={exporting}
+            className="btn btn-secondary gap-2 font-bold"
+          >
+            {exporting ? <Loader2 size={16} className="animate-spin" /> : <Download size={16} />}
+            Export Excel
+          </button>
+          <button onClick={openCreate} className="btn btn-primary gap-2 font-bold"><Plus size={18} /> Tambah Produk</button>
+        </div>
       </div>
 
       <div className="table-container">

@@ -20,6 +20,7 @@ import { backupRoutes } from './routes/backup.routes.js';
 import { midtransRoutes } from './routes/midtrans.routes.js';
 import { stockOpnameRoutes } from './routes/stock-opname.routes.js';
 import { categoryOptionsRoutes } from './routes/category-options.routes.js';
+import { exportRoutes } from './routes/export.routes.js';
 import { socketPlugin } from './plugins/socket.js';
 import { db } from './db/index.js';
 import { eq, sql } from 'drizzle-orm';
@@ -299,6 +300,7 @@ async function start() {
   await app.register(stockOpnameRoutes);
   await app.register(midtransRoutes);
   await app.register(categoryOptionsRoutes);
+  await app.register(exportRoutes);
 
   // Socket.IO
   await app.register(socketPlugin);

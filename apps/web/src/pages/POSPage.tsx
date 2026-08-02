@@ -72,6 +72,14 @@ export default function POSPage() {
   const [closingData, setClosingData] = useState<any>(null);
   const [loadingClosing, setLoadingClosing] = useState(false);
   const [noteItem, setNoteItem] = useState<{ id: string; name: string; note: string } | null>(null);
+  
+  // Shift & Kas Awal State
+  const [showOpenShiftModal, setShowOpenShiftModal] = useState(false);
+  const [openShiftAmount, setOpenShiftAmount] = useState('');
+  const [drawerAmount, setDrawerAmount] = useState('');
+  const [currentShift, setCurrentShift] = useState<any>(null);
+  const [openingShift, setOpeningShift] = useState(false);
+  const [closingShift, setClosingShift] = useState(false);
   const searchRef = useRef<HTMLInputElement>(null);
 
   const {
@@ -358,11 +366,47 @@ export default function POSPage() {
     }
   };
 
+  // Check shift status on mount
+  useEffect(() => {
+    checkShiftStatus();
+  }, []);
+
+  const checkShiftStatus = async () => {
+    try {
+      const res = await api.get<{ data: any }>('/shifts/current');
+      if (!res.data) {
+        setShowOpenShiftModal(true);
+      } else {
+        setCurrentShift(res.data);
+      }
+    } catch {
+      // Ignore
+    }
+  };
+
+  const handleOpenShift = async () => {
+    setOpeningShift(true);
+    try {
+      const amt = Number(openShiftAmount.replace(/\D/g, '')) || 0;
+      const res = await api.post<{ data: any }>('/shifts/open', { openAmount: amt });
+      if (res.data) {
+        setCurrentShift(res.data);
+        setShowOpenShiftModal(false);
+        toast.success('Shift berhasil dibuka! Kas awal: ' + formatCurrency(amt));
+      }
+    } catch (err: any) {
+      toast.error(err.response?.data?.error || 'Gagal membuka shift');
+    } finally {
+      setOpeningShift(false);
+    }
+  };
+
   const handleFetchClosing = async () => {
     setLoadingClosing(true);
     try {
-      const res = await api.get<{ data: any }>('/transactions/closing-summary');
+      const res = await api.get<{ data: any }>('/shifts/current-summary');
       setClosingData(res.data);
+      setDrawerAmount(String(res.data.expectedAmount || 0));
       setShowClosingModal(true);
     } catch (err: any) {
       toast.error('Gagal memuat rekap closing');
@@ -371,20 +415,49 @@ export default function POSPage() {
     }
   };
 
+  const handleConfirmCloseShift = async () => {
+    if (!closingData?.shiftId) {
+      setShowClosingModal(false);
+      return;
+    }
+    setClosingShift(true);
+    try {
+      const closeAmt = Number(drawerAmount.replace(/\D/g, '')) || 0;
+      await api.post(`/shifts/${closingData.shiftId}/close`, { closeAmount: closeAmt });
+      toast.success('Shift kasir berhasil ditutup!');
+      setShowClosingModal(false);
+      setShowOpenShiftModal(true);
+      setOpenShiftAmount('');
+      setCurrentShift(null);
+    } catch (err: any) {
+      toast.error('Gagal menutup shift: ' + (err.response?.data?.error || err.message));
+    } finally {
+      setClosingShift(false);
+    }
+  };
+
   const handlePrintClosing = async () => {
     if (!closingData) return;
     try {
+      const actualDrawer = Number(drawerAmount.replace(/\D/g, '')) || 0;
+      const diff = actualDrawer - (closingData.expectedAmount || 0);
+
       const reportPayload = {
         storeName: "D'Mac Chicken Crunch",
         cashierName: user?.name || 'Kasir',
         date: new Date(),
         totalTxCount: closingData.totalTxCount,
-        totalOmset: closingData.totalOmset,
-        totalCash: closingData.totalCash,
-        totalQris: closingData.totalQris,
-        totalTransfer: closingData.totalTransfer,
-        totalNonCash: closingData.totalNonCash,
-        totalDiscount: closingData.totalDiscount,
+        totalOmset: closingData.totalSales || closingData.totalOmset,
+        totalCash: closingData.totalCashSales || closingData.totalCash,
+        totalQris: closingData.totalQris || 0,
+        totalTransfer: closingData.totalTransfer || 0,
+        totalNonCash: closingData.totalNonCash || 0,
+        totalDiscount: closingData.totalDiscount || 0,
+        openAmount: closingData.openAmount || 0,
+        totalExpenses: closingData.totalExpenses || 0,
+        expectedAmount: closingData.expectedAmount || 0,
+        closeAmount: actualDrawer,
+        difference: diff,
         paperSize: '58mm' as const,
       };
 
@@ -974,73 +1047,182 @@ export default function POSPage() {
         </div>
       )}
 
-      {/* Closing Kasir Summary Modal */}
+      {/* Open Shift Modal (Kas Awal) */}
+      {showOpenShiftModal && (
+        <div className="modal-overlay">
+          <div className="modal-content max-w-md">
+            <div className="text-center mb-4">
+              <div className="w-12 h-12 rounded-full bg-blue-500/10 text-blue-500 flex items-center justify-center mx-auto mb-2">
+                <ShoppingCart size={24} />
+              </div>
+              <h3 className="font-bold text-lg">Buka Shift Kasir</h3>
+              <p className="text-xs text-[var(--color-text-dim)]">Masukkan kas awal yang ada di laci kasir saat ini</p>
+            </div>
+
+            <div className="space-y-4">
+              <div>
+                <label className="text-xs font-semibold text-[var(--color-text-muted)] mb-1 block">Kas Awal di Laci Kasir (Rp)</label>
+                <input
+                  type="number"
+                  placeholder="0"
+                  value={openShiftAmount}
+                  onChange={(e) => setOpenShiftAmount(e.target.value)}
+                  className="input text-center text-xl font-bold w-full"
+                  autoFocus
+                />
+              </div>
+
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setOpenShiftAmount('0');
+                    handleOpenShift();
+                  }}
+                  className="btn btn-secondary flex-1 py-3 text-sm font-semibold"
+                >
+                  Rp 0 (Tanpa Kas Awal)
+                </button>
+                <button
+                  type="button"
+                  onClick={handleOpenShift}
+                  disabled={openingShift}
+                  className="btn btn-primary flex-1 py-3 text-sm font-bold gap-2"
+                >
+                  {openingShift ? <Loader2 size={16} className="animate-spin" /> : <CheckCircle2 size={16} />}
+                  Buka Shift
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Ringkasan Shift / Closing Kasir Modal */}
       {showClosingModal && closingData && (
         <div className="modal-overlay" onClick={() => setShowClosingModal(false)}>
-          <div className="modal-content max-w-md" onClick={(e) => e.stopPropagation()}>
-            <div className="flex items-center justify-between pb-3 border-b border-[var(--color-border)] mb-4">
-              <div className="flex items-center gap-2">
-                <BarChart2 size={20} className="text-orange-400" />
-                <h3 className="font-bold text-base">Rekap Closing Kasir</h3>
-              </div>
+          <div className="modal-content max-w-md space-y-4" onClick={(e) => e.stopPropagation()}>
+            {/* Header */}
+            <div className="flex items-center justify-between pb-2 border-b border-[var(--color-border)]">
+              <h3 className="font-bold text-base text-[var(--color-text)]">Ringkasan Shift</h3>
               <button onClick={() => setShowClosingModal(false)} className="btn btn-ghost btn-icon">
-                <X size={20} />
+                <X size={18} />
               </button>
             </div>
 
-            <div className="space-y-3">
-              <div className="p-3 rounded-lg bg-[var(--color-surface)] border border-[var(--color-border)]">
-                <p className="text-xs text-[var(--color-text-dim)]">Kasir: {user?.name || 'Administrator'}</p>
-                <p className="text-xs text-[var(--color-text-dim)]">Tanggal: {new Date().toLocaleDateString('id-ID', { dateStyle: 'full' })}</p>
+            {/* Info Shift */}
+            <div className="p-3 rounded-lg bg-[var(--color-surface)] border border-[var(--color-border)] space-y-1 text-xs">
+              <div className="flex justify-between">
+                <span className="text-[var(--color-text-muted)]">Kasir</span>
+                <span className="font-semibold text-[var(--color-text)]">{user?.name || 'Kasir'}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-[var(--color-text-muted)]">Buka</span>
+                <span className="font-semibold text-[var(--color-text)]">
+                  {closingData.startedAt ? new Date(closingData.startedAt).toLocaleString('id-ID', { dateStyle: 'medium', timeStyle: 'short' }) : '-'}
+                </span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-[var(--color-text-muted)]">Tutup</span>
+                <span className="font-semibold text-[var(--color-text)]">
+                  {new Date().toLocaleString('id-ID', { dateStyle: 'medium', timeStyle: 'short' })}
+                </span>
+              </div>
+            </div>
+
+            {/* Kas di Laci Kasir */}
+            <div className="p-3 rounded-lg bg-[var(--color-surface)] border border-[var(--color-border)] space-y-2 text-xs">
+              <p className="font-bold text-xs text-[var(--color-text)] border-b border-[var(--color-border)] pb-1">Kas di Laci Kasir</p>
+              
+              <div className="flex justify-between">
+                <span className="text-[var(--color-text-muted)]">Kas Awal di Laci Kasir</span>
+                <span className="font-semibold">{formatCurrency(closingData.openAmount || 0)}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-[var(--color-text-muted)]">Tunai (Masuk)</span>
+                <span className="font-semibold">{formatCurrency(closingData.totalCashSales || closingData.totalCash || 0)}</span>
+              </div>
+              <div className="flex justify-between text-red-400">
+                <span>Pengeluaran (Tunai)</span>
+                <span className="font-semibold">-{formatCurrency(closingData.totalExpenses || 0)}</span>
+              </div>
+              
+              <div className="flex justify-between pt-1 border-t border-[var(--color-border)] font-bold text-sm">
+                <span>Kas yang Diharapkan</span>
+                <span className="text-emerald-400">{formatCurrency(closingData.expectedAmount || 0)}</span>
               </div>
 
-              {/* Summary Cards */}
-              <div className="grid grid-cols-2 gap-2">
-                <div className="p-3 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-center">
-                  <p className="text-[11px] text-[var(--color-text-muted)]">Total Omset</p>
-                  <p className="text-lg font-bold text-emerald-400">{formatCurrency(closingData.totalOmset)}</p>
-                </div>
-                <div className="p-3 rounded-lg bg-blue-500/10 border border-blue-500/20 text-center">
-                  <p className="text-[11px] text-[var(--color-text-muted)]">Total Transaksi</p>
-                  <p className="text-lg font-bold text-blue-400">{closingData.totalTxCount} Tx</p>
-                </div>
+              <div className="pt-2 border-t border-[var(--color-border)]">
+                <label className="text-[11px] font-semibold text-[var(--color-text-muted)] mb-1 block">Kas di Laci Kasir (Hitungan Fisik)</label>
+                <input
+                  type="number"
+                  value={drawerAmount}
+                  onChange={(e) => setDrawerAmount(e.target.value)}
+                  className="input text-center text-lg font-bold w-full py-1.5"
+                  placeholder="0"
+                />
               </div>
 
-              {/* Payment Breakdown */}
-              <div className="p-3 rounded-lg bg-[var(--color-surface)] border border-[var(--color-border)] space-y-2 text-xs">
-                <p className="font-bold text-[var(--color-text-muted)] border-b border-[var(--color-border)] pb-1">Rincian Pembayaran</p>
-                <div className="flex justify-between">
-                  <span>💵 Tunai (Cash)</span>
-                  <span className="font-semibold">{formatCurrency(closingData.totalCash)}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span>📱 QRIS</span>
-                  <span className="font-semibold">{formatCurrency(closingData.totalQris)}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span>🏦 Bank Transfer</span>
-                  <span className="font-semibold">{formatCurrency(closingData.totalTransfer)}</span>
-                </div>
-                <div className="flex justify-between pt-1 border-t border-[var(--color-border)] font-bold">
-                  <span>💳 Total Non-Tunai</span>
-                  <span className="text-blue-400">{formatCurrency(closingData.totalNonCash)}</span>
-                </div>
-                {closingData.totalDiscount > 0 && (
-                  <div className="flex justify-between text-orange-400 font-semibold pt-1 border-t border-[var(--color-border)]">
-                    <span>🏷️ Total Diskon</span>
-                    <span>-{formatCurrency(closingData.totalDiscount)}</span>
+              {/* Status Selisih */}
+              {(() => {
+                const actual = Number(drawerAmount) || 0;
+                const expected = closingData.expectedAmount || 0;
+                const diff = actual - expected;
+                const label = diff > 0 ? `Lebih +${formatCurrency(diff)}` : diff < 0 ? `Kurang -${formatCurrency(Math.abs(diff))}` : 'Pas (Sesuai Rp 0)';
+                const bgClass = diff >= 0 ? 'bg-emerald-500/15 border-emerald-500/30 text-emerald-400' : 'bg-red-500/15 border-red-500/30 text-red-400';
+                return (
+                  <div className={`p-2 rounded-lg border text-center font-bold text-xs mt-1 ${bgClass}`}>
+                    {label}
                   </div>
-                )}
-              </div>
+                );
+              })()}
+            </div>
 
-              {/* Action Button: Cetak Struk Closing */}
+            {/* Ikhtisar */}
+            <div className="p-3 rounded-lg bg-[var(--color-surface)] border border-[var(--color-border)] space-y-1.5 text-xs">
+              <p className="font-bold text-xs text-[var(--color-text)] border-b border-[var(--color-border)] pb-1">Ikhtisar</p>
+              <div className="flex justify-between">
+                <span className="text-[var(--color-text-muted)]">Transaksi</span>
+                <span className="font-bold text-blue-400">{closingData.totalTxCount}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-[var(--color-text-muted)]">Total Penjualan</span>
+                <span className="font-bold text-emerald-400">{formatCurrency(closingData.totalSales || closingData.totalOmset || 0)}</span>
+              </div>
+            </div>
+
+            {/* Rincian Pembayaran */}
+            <div className="p-3 rounded-lg bg-[var(--color-surface)] border border-[var(--color-border)] space-y-1.5 text-xs">
+              <p className="font-bold text-xs text-[var(--color-text)] border-b border-[var(--color-border)] pb-1">Rincian Pembayaran</p>
+              <div className="flex justify-between">
+                <span className="text-[var(--color-text-muted)]">Tunai</span>
+                <span className="font-semibold">{formatCurrency(closingData.totalCashSales || closingData.totalCash || 0)}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-[var(--color-text-muted)]">Non-Tunai</span>
+                <span className="font-semibold text-blue-400">{formatCurrency(closingData.totalNonCash || 0)}</span>
+              </div>
+            </div>
+
+            {/* Action Buttons */}
+            <div className="flex gap-2 pt-1">
               <button
                 type="button"
                 onClick={handlePrintClosing}
-                className="btn btn-primary w-full btn-lg gap-2 font-bold mt-2"
+                className="btn btn-secondary flex-1 gap-2 font-bold py-2.5"
               >
-                <Printer size={18} />
-                Cetak Struk Closing Kasir
+                <Printer size={16} />
+                Cetak Struk
+              </button>
+
+              <button
+                type="button"
+                onClick={handleConfirmCloseShift}
+                disabled={closingShift}
+                className="btn btn-primary flex-1 gap-2 font-bold py-2.5"
+              >
+                {closingShift ? <Loader2 size={16} className="animate-spin" /> : <CheckCircle2 size={16} />}
+                Tutup Shift & Selesai
               </button>
             </div>
           </div>
