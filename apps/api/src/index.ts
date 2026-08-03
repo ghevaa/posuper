@@ -260,7 +260,7 @@ async function start() {
     await app.register(fastifyStatic, {
       root: webDistDir,
       prefix: '/',
-      decorateReply: false,
+      decorateReply: true,
       setHeaders: (res, filePath) => {
         if (filePath.endsWith('.html')) {
           res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
