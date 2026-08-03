@@ -49,8 +49,8 @@ jobs:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ""
         with:
-          tagName: v__VERSION__
-          releaseName: 'POS Yoga v__VERSION__'
+          tagName: ${{ github.ref_name }}
+          releaseName: 'POS Yoga ${{ github.ref_name }}'
           releaseBody: 'Pembaruan otomatis POS Yoga (Desktop & Android APK).'
           releaseDraft: false
           prerelease: false
