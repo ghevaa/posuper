@@ -981,7 +981,75 @@ export default function POSPage() {
               </button>
             </div>
 
-            <div className="text-center mb-5">
+            {/* Subtotal & Diskon Section */}
+            <div className="bg-[var(--color-surface)] p-3 rounded-lg border border-[var(--color-border)] mb-4 space-y-2">
+              <div className="flex justify-between items-center text-xs text-[var(--color-text-muted)]">
+                <span>Subtotal</span>
+                <span>{formatCurrency(subtotal)}</span>
+              </div>
+
+              <div className="flex justify-between items-center gap-2 pt-2 border-t border-[var(--color-border)]">
+                <div className="flex items-center gap-1.5">
+                  <span className="text-xs font-semibold text-[var(--color-text-muted)]">Diskon</span>
+                  {discountType === 'percent' && discountValue > 0 && (
+                    <span className="text-[11px] text-emerald-400 font-bold">
+                      ({discountValue}% = -{formatCurrency(discountAmount)})
+                    </span>
+                  )}
+                  {discountType === 'fixed' && discountAmount > 0 && (
+                    <span className="text-[11px] text-emerald-400 font-bold">
+                      (-{formatCurrency(discountAmount)})
+                    </span>
+                  )}
+                </div>
+
+                <div className="flex items-center gap-1.5">
+                  <input
+                    type="number"
+                    placeholder="0"
+                    value={discountValue || ''}
+                    onChange={(e) => {
+                      const val = Math.max(0, Number(e.target.value));
+                      setDiscount(val, discountType);
+                      const newDisc = discountType === 'percent'
+                        ? Math.min(subtotal, Math.round((subtotal * val) / 100))
+                        : Math.min(subtotal, val);
+                      const newTotal = Math.max(0, subtotal - newDisc);
+                      setPaidAmount(String(newTotal));
+                    }}
+                    className="input input-sm w-24 text-xs font-bold text-emerald-400 text-right"
+                  />
+                  <div className="flex items-center gap-0.5 bg-[var(--color-surface-light)] rounded p-0.5 border border-[var(--color-border)]">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setDiscount(discountValue, 'fixed');
+                        const newDisc = Math.min(subtotal, discountValue);
+                        const newTotal = Math.max(0, subtotal - newDisc);
+                        setPaidAmount(String(newTotal));
+                      }}
+                      className={`px-2 py-0.5 text-xs font-bold rounded ${discountType === 'fixed' ? 'bg-blue-600 text-white' : 'text-[var(--color-text-dim)]'}`}
+                    >
+                      Rp
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setDiscount(discountValue, 'percent');
+                        const newDisc = Math.min(subtotal, Math.round((subtotal * discountValue) / 100));
+                        const newTotal = Math.max(0, subtotal - newDisc);
+                        setPaidAmount(String(newTotal));
+                      }}
+                      className={`px-2 py-0.5 text-xs font-bold rounded ${discountType === 'percent' ? 'bg-blue-600 text-white' : 'text-[var(--color-text-dim)]'}`}
+                    >
+                      %
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="text-center mb-4">
               <p className="text-xs text-[var(--color-text-muted)]">Total Tagihan</p>
               <p className="text-3xl font-bold gradient-text">{formatCurrency(grandTotal)}</p>
             </div>
