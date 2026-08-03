@@ -143,31 +143,28 @@ export async function authRoutes(app: FastifyInstance) {
     }
 
     try {
-      // Use raw SQL for reliable FK constraint handling
-      // 1. Remove auth-related records
-      await db.execute(sql`DELETE FROM "session" WHERE "user_id" = ${id}`);
-      await db.execute(sql`DELETE FROM "account" WHERE "user_id" = ${id}`);
+      // Execute each FK cleanup step independently with try/catch to ensure robust deletion
+      try { await db.execute(sql`DELETE FROM "session" WHERE "user_id" = ${id}`); } catch (e) { console.warn('Delete session warning:', e); }
+      try { await db.execute(sql`DELETE FROM "account" WHERE "user_id" = ${id}`); } catch (e) { console.warn('Delete account warning:', e); }
 
-      // 2. Reassign transactions to current admin (preserve history)
-      await db.execute(sql`UPDATE "transactions" SET "user_id" = ${currentUser.id} WHERE "user_id" = ${id}`);
+      // Reassign transactions to current active user (preserve history)
+      try { await db.execute(sql`UPDATE "transactions" SET "user_id" = ${currentUser.id} WHERE "user_id" = ${id}`); } catch (e) { console.warn('Update tx user warning:', e); }
 
-      // 3. Delete related operational data
-      await db.execute(sql`DELETE FROM "stock_opname_items" WHERE "session_id" IN (SELECT "id" FROM "stock_opname_sessions" WHERE "user_id" = ${id})`);
-      await db.execute(sql`DELETE FROM "stock_opname_sessions" WHERE "user_id" = ${id}`);
-      await db.execute(sql`DELETE FROM "cash_shifts" WHERE "user_id" = ${id}`);
-      await db.execute(sql`DELETE FROM "expenses" WHERE "user_id" = ${id}`);
+      // Clean up operational data for target user
+      try { await db.execute(sql`DELETE FROM "stock_opname_items" WHERE "session_id" IN (SELECT "id" FROM "stock_opname_sessions" WHERE "user_id" = ${id})`); } catch (e) { console.warn('Delete opname items warning:', e); }
+      try { await db.execute(sql`DELETE FROM "stock_opname_sessions" WHERE "user_id" = ${id}`); } catch (e) { console.warn('Delete opname sessions warning:', e); }
+      try { await db.execute(sql`DELETE FROM "cash_shifts" WHERE "user_id" = ${id}`); } catch (e) { console.warn('Delete cash shifts warning:', e); }
+      try { await db.execute(sql`DELETE FROM "expenses" WHERE "user_id" = ${id}`); } catch (e) { console.warn('Delete expenses warning:', e); }
+      try { await db.execute(sql`UPDATE "logs" SET "user_id" = NULL WHERE "user_id" = ${id}`); } catch (e) { console.warn('Update logs warning:', e); }
 
-      // 4. Nullify audit logs
-      await db.execute(sql`UPDATE "logs" SET "user_id" = NULL WHERE "user_id" = ${id}`);
-
-      // 5. Delete user
+      // Final delete target user record
       await db.execute(sql`DELETE FROM "user" WHERE "id" = ${id}`);
 
       await createAuditLog(req, 'user.deleted', `User ${targetUser.email} deleted`);
       return reply.send({ success: true, message: 'Pengguna berhasil dihapus' });
     } catch (err: any) {
       console.error('Delete user error:', err);
-      return reply.status(500).send({ success: false, error: 'Gagal menghapus pengguna: ' + (err.message || 'Unknown error') });
+      return reply.status(500).send({ success: false, error: 'Gagal menghapus pengguna: ' + (err.message || String(err)) });
     }
   });
 
