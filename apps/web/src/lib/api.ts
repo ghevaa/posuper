@@ -131,12 +131,31 @@ export const api = {
           reader.onloadend = async () => {
             try {
               const base64Data = (reader.result as string).split(',')[1];
-              await Filesystem.writeFile({
+
+              // Request permissions if needed
+              try { await Filesystem.requestPermissions(); } catch (_) {}
+
+              const writeRes = await Filesystem.writeFile({
                 path: defaultFilename,
                 data: base64Data,
                 directory: Directory.Documents,
                 recursive: true,
               });
+
+              // Try opening share sheet so user can open / save file anywhere easily
+              try {
+                const { Share } = await import('@capacitor/share');
+                const fileUri = writeRes.uri || (await Filesystem.getUri({ directory: Directory.Documents, path: defaultFilename })).uri;
+                await Share.share({
+                  title: defaultFilename,
+                  text: 'File Excel Laporan POS Yoga',
+                  url: fileUri,
+                  dialogTitle: 'Buka atau Simpan File Excel',
+                });
+              } catch (_) {
+                // If share fails, fallback is already written to Documents
+              }
+
               resolve();
             } catch (e) {
               reject(e);

@@ -12,6 +12,7 @@
     "@capacitor-community/bluetooth-le": "^8.2.0",
     "@capacitor/filesystem": "^8.1.2",
     "@capacitor/network": "^8.0.1",
+    "@capacitor/share": "^8.0.1",
     "@pos-yoga/config": "*",
     "@pos-yoga/types": "*",
     "@tanstack/react-query": "^5.62.0",
