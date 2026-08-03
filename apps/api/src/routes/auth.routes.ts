@@ -155,15 +155,27 @@ export async function authRoutes(app: FastifyInstance) {
     console.log('[DELETE USER] Proceeding to delete:', targetUser.email, 'role:', targetUser.role);
 
     try {
-      // Execute each FK cleanup step independently with try/catch to ensure robust deletion
-      try { await db.execute(sql`DELETE FROM "session" WHERE "user_id" = ${id}`); } catch (e: any) { console.warn('[DELETE USER] session cleanup:', e.message); }
-      try { await db.execute(sql`DELETE FROM "account" WHERE "user_id" = ${id}`); } catch (e: any) { console.warn('[DELETE USER] account cleanup:', e.message); }
-      try { await db.execute(sql`UPDATE "transactions" SET "user_id" = ${currentUser.id} WHERE "user_id" = ${id}`); } catch (e: any) { console.warn('[DELETE USER] tx reassign:', e.message); }
-      try { await db.execute(sql`DELETE FROM "stock_opname_items" WHERE "session_id" IN (SELECT "id" FROM "stock_opname_sessions" WHERE "user_id" = ${id})`); } catch (e: any) { console.warn('[DELETE USER] opname items:', e.message); }
-      try { await db.execute(sql`DELETE FROM "stock_opname_sessions" WHERE "user_id" = ${id}`); } catch (e: any) { console.warn('[DELETE USER] opname sessions:', e.message); }
-      try { await db.execute(sql`DELETE FROM "cash_shifts" WHERE "user_id" = ${id}`); } catch (e: any) { console.warn('[DELETE USER] cash shifts:', e.message); }
-      try { await db.execute(sql`DELETE FROM "expenses" WHERE "user_id" = ${id}`); } catch (e: any) { console.warn('[DELETE USER] expenses:', e.message); }
-      try { await db.execute(sql`UPDATE "logs" SET "user_id" = NULL WHERE "user_id" = ${id}`); } catch (e: any) { console.warn('[DELETE USER] logs nullify:', e.message); }
+      // Reassign all FK references from target user to current user (or NULL)
+      // so that no FK constraint blocks the deletion
+      const steps = [
+        { label: 'sessions',        sql: sql`DELETE FROM "session" WHERE "user_id" = ${id}` },
+        { label: 'accounts',        sql: sql`DELETE FROM "account" WHERE "user_id" = ${id}` },
+        { label: 'tx-reassign',     sql: sql`UPDATE "transactions" SET "user_id" = ${currentUser.id} WHERE "user_id" = ${id}` },
+        { label: 'opname-items',    sql: sql`DELETE FROM "stock_opname_items" WHERE "session_id" IN (SELECT "id" FROM "stock_opname_sessions" WHERE "user_id" = ${id})` },
+        { label: 'opname-sessions', sql: sql`DELETE FROM "stock_opname_sessions" WHERE "user_id" = ${id}` },
+        { label: 'cash-shifts',     sql: sql`DELETE FROM "cash_shifts" WHERE "user_id" = ${id}` },
+        { label: 'expenses',        sql: sql`DELETE FROM "expenses" WHERE "user_id" = ${id}` },
+        { label: 'logs-nullify',    sql: sql`UPDATE "logs" SET "user_id" = NULL WHERE "user_id" = ${id}` },
+      ];
+
+      for (const step of steps) {
+        try {
+          await db.execute(step.sql);
+          console.log(`[DELETE USER] ✓ ${step.label}`);
+        } catch (e: any) {
+          console.warn(`[DELETE USER] ⚠ ${step.label}:`, e.message);
+        }
+      }
 
       // Final delete target user record
       await db.execute(sql`DELETE FROM "user" WHERE "id" = ${id}`);

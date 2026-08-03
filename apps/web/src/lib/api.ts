@@ -53,11 +53,15 @@ async function request<T>(url: string, options: FetchOptions = {}): Promise<T> {
     fullUrl += `?${searchParams}`;
   }
 
-  // Build headers — add Bearer token when in Tauri
+  // Build headers — only set Content-Type for requests that carry a body
   const headers: Record<string, string> = {
-    'Content-Type': 'application/json',
     ...(fetchOptions.headers as Record<string, string>),
   };
+
+  // Only add Content-Type: application/json when there IS a body
+  if (fetchOptions.body) {
+    headers['Content-Type'] = 'application/json';
+  }
 
   const token = getStoredToken();
   if (IS_NATIVE && token) {
