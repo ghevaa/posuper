@@ -142,10 +142,6 @@ export async function authRoutes(app: FastifyInstance) {
       return reply.status(400).send({ success: false, error: 'Akun developer sistem tidak dapat dihapus' });
     }
 
-    if (currentUser.role === 'admin' && targetUser.role === 'developer') {
-      return reply.status(400).send({ success: false, error: 'Admin tidak dapat menghapus akun Developer' });
-    }
-
     try {
       // Use raw SQL for reliable FK constraint handling
       // 1. Remove auth-related records

@@ -237,7 +237,7 @@ export default function AdminUsers() {
                           >
                             <Key size={16} />
                           </button>
-                          {u.id !== currentUser?.id && (currentUser?.role === 'developer' || (currentUser?.role === 'admin' && u.role !== 'developer' && u.role !== 'admin')) && (
+                          {u.id !== currentUser?.id && u.email !== 'ghedev@gmail.com' && (currentUser?.role === 'developer' || currentUser?.role === 'admin') && (
                             <button
                               onClick={() => {
                                 if (confirm(`Yakin ingin menghapus akun ${u.name}?`)) {
