@@ -116,6 +116,37 @@ export const api = {
     }
 
     const blob = await res.blob();
+
+    // Android Capacitor Native Download
+    if (IS_CAPACITOR) {
+      try {
+        const { Filesystem, Directory } = await import('@capacitor/filesystem');
+        const reader = new FileReader();
+        reader.readAsDataURL(blob);
+        await new Promise<void>((resolve, reject) => {
+          reader.onloadend = async () => {
+            try {
+              const base64Data = (reader.result as string).split(',')[1];
+              await Filesystem.writeFile({
+                path: defaultFilename,
+                data: base64Data,
+                directory: Directory.Documents,
+                recursive: true,
+              });
+              resolve();
+            } catch (e) {
+              reject(e);
+            }
+          };
+          reader.onerror = reject;
+        });
+        return;
+      } catch (capErr) {
+        console.warn('Capacitor filesystem write failed:', capErr);
+      }
+    }
+
+    // Fallback for Web Browser & Tauri Desktop
     const blobUrl = window.URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = blobUrl;

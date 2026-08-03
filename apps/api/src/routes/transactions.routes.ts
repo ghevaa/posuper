@@ -47,11 +47,11 @@ export async function transactionRoutes(app: FastifyInstance) {
       const taxRate = Number(body.taxRate || 0);
       const taxAmount = ((subtotal - discount) * taxRate) / 100;
       const total = subtotal - discount + taxAmount;
-      const paidAmount = Number(body.paidAmount || 0);
+      const paidAmount = Number(body.paidAmount || total);
       const changeAmount = paidAmount - total;
 
-      // Determine status based on payment method
-      const status = paymentMethod === 'qris' ? 'pending' : 'completed';
+      // All transactions completed immediately upon checkout
+      const status = 'completed';
 
       // Insert transaction
       await db.insert(transactions).values({
