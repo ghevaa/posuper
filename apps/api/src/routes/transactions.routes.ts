@@ -4,8 +4,8 @@
 
 import type { FastifyInstance } from 'fastify';
 import { db } from '../db/index.js';
-import { transactions, transactionItems, payments, products } from '../db/schema.js';
-import { eq, desc, sql, and, gte, lte } from 'drizzle-orm';
+import { transactions, transactionItems, payments, products, user } from '../db/schema.js';
+import { eq, desc, sql, and, gte, lte, ilike } from 'drizzle-orm';
 import { nanoid } from 'nanoid';
 import { INVOICE_PREFIX } from '@pos-yoga/config';
 import { requireAuth, requireRole } from '../middleware/auth.middleware.js';
@@ -291,30 +291,132 @@ export async function transactionRoutes(app: FastifyInstance) {
     });
   });
 
-  // List transactions
+  // Helper: build date range from preset
+  function getDateRange(dateFilter: string, from?: string, to?: string): { start?: Date; end?: Date } {
+    const now = new Date();
+    const startOfDay = (d: Date) => { d.setHours(0, 0, 0, 0); return d; };
+    const endOfDay = (d: Date) => { d.setHours(23, 59, 59, 999); return d; };
+
+    switch (dateFilter) {
+      case 'today':
+        return { start: startOfDay(new Date(now)), end: endOfDay(new Date(now)) };
+      case 'yesterday': {
+        const y = new Date(now); y.setDate(y.getDate() - 1);
+        return { start: startOfDay(y), end: endOfDay(new Date(y)) };
+      }
+      case 'this_week': {
+        const d = new Date(now); d.setDate(d.getDate() - d.getDay());
+        return { start: startOfDay(d), end: endOfDay(new Date(now)) };
+      }
+      case 'last_week': {
+        const d = new Date(now); d.setDate(d.getDate() - d.getDay() - 7);
+        const e = new Date(d); e.setDate(e.getDate() + 6);
+        return { start: startOfDay(d), end: endOfDay(e) };
+      }
+      case 'this_month': {
+        const d = new Date(now.getFullYear(), now.getMonth(), 1);
+        return { start: startOfDay(d), end: endOfDay(new Date(now)) };
+      }
+      case 'last_month': {
+        const d = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+        const e = new Date(now.getFullYear(), now.getMonth(), 0);
+        return { start: startOfDay(d), end: endOfDay(e) };
+      }
+      case 'custom':
+        return {
+          start: from ? new Date(from) : undefined,
+          end: to ? endOfDay(new Date(to)) : undefined,
+        };
+      default: // 'all' or unset
+        return { start: from ? new Date(from) : undefined, end: to ? endOfDay(new Date(to)) : undefined };
+    }
+  }
+
+  // Helper: build filter conditions
+  function buildFilterConditions(query: any) {
+    const { dateFilter, from, to, status, orderType, paymentMethod, invoiceNo, userId } = query;
+    const conditions: any[] = [];
+
+    const range = getDateRange(dateFilter || '', from, to);
+    if (range.start) conditions.push(gte(transactions.createdAt, range.start));
+    if (range.end) conditions.push(lte(transactions.createdAt, range.end));
+    if (status) conditions.push(eq(transactions.status, status));
+    if (orderType) conditions.push(eq(transactions.orderType, orderType));
+    if (paymentMethod) conditions.push(eq(transactions.paymentMethod, paymentMethod));
+    if (invoiceNo) conditions.push(ilike(transactions.invoiceNo, `%${invoiceNo}%`));
+    if (userId) conditions.push(eq(transactions.userId, userId));
+
+    return conditions;
+  }
+
+  // List transactions (with filters, pagination, and user name)
   app.get('/api/transactions', { preHandler: [requireAuth] }, async (req, reply) => {
-    const { page = '1', limit = '20', from, to } = req.query as any;
-    const offset = (Number(page) - 1) * Number(limit);
+    const query = req.query as any;
+    const page = Number(query.page || '1');
+    const limit = Number(query.limit || '50');
+    const offset = (page - 1) * limit;
 
-    let conditions: any[] = [];
-    if (from) conditions.push(gte(transactions.createdAt, new Date(from)));
-    if (to) conditions.push(lte(transactions.createdAt, new Date(to)));
+    const conditions = buildFilterConditions(query);
+    const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
 
-    const txList = await db.select().from(transactions)
-      .where(conditions.length > 0 ? and(...conditions) : undefined)
+    const txList = await db.select({
+      id: transactions.id,
+      invoiceNo: transactions.invoiceNo,
+      userId: transactions.userId,
+      userName: user.name,
+      subtotal: transactions.subtotal,
+      discount: transactions.discount,
+      tax: transactions.tax,
+      total: transactions.total,
+      paidAmount: transactions.paidAmount,
+      changeAmount: transactions.changeAmount,
+      status: transactions.status,
+      paymentMethod: transactions.paymentMethod,
+      orderType: transactions.orderType,
+      tableNo: transactions.tableNo,
+      note: transactions.note,
+      createdAt: transactions.createdAt,
+    }).from(transactions)
+      .leftJoin(user, eq(transactions.userId, user.id))
+      .where(whereClause)
       .orderBy(desc(transactions.createdAt))
-      .limit(Number(limit))
+      .limit(limit)
       .offset(offset);
 
     const countResult = await db.select({ count: sql<number>`count(*)` }).from(transactions)
-      .where(conditions.length > 0 ? and(...conditions) : undefined);
+      .where(whereClause);
+
+    // Aggregate total per date and per user
+    const summaryByDate = await db.select({
+      date: sql<string>`TO_CHAR(${transactions.createdAt}, 'YYYY-MM-DD')`,
+      totalAmount: sql<number>`SUM(CAST(${transactions.total} AS NUMERIC))`,
+      count: sql<number>`COUNT(*)`,
+    }).from(transactions)
+      .where(whereClause)
+      .groupBy(sql`TO_CHAR(${transactions.createdAt}, 'YYYY-MM-DD')`)
+      .orderBy(sql`TO_CHAR(${transactions.createdAt}, 'YYYY-MM-DD') DESC`);
+
+    const summaryByUser = await db.select({
+      userId: transactions.userId,
+      userName: user.name,
+      totalAmount: sql<number>`SUM(CAST(${transactions.total} AS NUMERIC))`,
+      count: sql<number>`COUNT(*)`,
+    }).from(transactions)
+      .leftJoin(user, eq(transactions.userId, user.id))
+      .where(whereClause)
+      .groupBy(transactions.userId, user.name);
+
+    const grandTotal = summaryByDate.reduce((s, r) => s + Number(r.totalAmount || 0), 0);
 
     return reply.send({
       success: true,
       data: txList,
       total: Number(countResult[0].count),
-      page: Number(page),
-      limit: Number(limit),
+      page,
+      limit,
+      summaryByDate,
+      summaryByUser,
+      grandTotal,
     });
   });
 
@@ -354,16 +456,48 @@ export async function transactionRoutes(app: FastifyInstance) {
     return reply.send({ success: true, message: 'Transaction voided' });
   });
 
-  // Today's transactions for cashier
+  // Today's transactions for cashier (with optional filters)
   app.get('/api/transactions/today', { preHandler: [requireAuth] }, async (req, reply) => {
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
+    const query = req.query as any;
+    const currentUser = (req as any).user;
 
-    const txList = await db.select().from(transactions)
-      .where(gte(transactions.createdAt, today))
+    // Default to today if no dateFilter specified
+    const dateFilter = query.dateFilter || 'today';
+    const conditions = buildFilterConditions({ ...query, dateFilter });
+
+    // Cashiers only see their own transactions (unless admin/developer)
+    if (currentUser.role === 'cashier') {
+      conditions.push(eq(transactions.userId, currentUser.id));
+    }
+
+    const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
+
+    const txList = await db.select({
+      id: transactions.id,
+      invoiceNo: transactions.invoiceNo,
+      userId: transactions.userId,
+      userName: user.name,
+      subtotal: transactions.subtotal,
+      discount: transactions.discount,
+      tax: transactions.tax,
+      total: transactions.total,
+      paidAmount: transactions.paidAmount,
+      changeAmount: transactions.changeAmount,
+      status: transactions.status,
+      paymentMethod: transactions.paymentMethod,
+      orderType: transactions.orderType,
+      tableNo: transactions.tableNo,
+      note: transactions.note,
+      createdAt: transactions.createdAt,
+    }).from(transactions)
+      .leftJoin(user, eq(transactions.userId, user.id))
+      .where(whereClause)
       .orderBy(desc(transactions.createdAt));
 
-    return reply.send({ success: true, data: txList });
+    // Summary totals
+    const grandTotal = txList.reduce((s, r) => s + Number(r.total || 0), 0);
+
+    return reply.send({ success: true, data: txList, grandTotal, count: txList.length });
   });
 
   // Today's transactions WITH items — for Kitchen Display
