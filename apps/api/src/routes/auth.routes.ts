@@ -128,42 +128,51 @@ export async function authRoutes(app: FastifyInstance) {
     const { id } = req.params as { id: string };
     const currentUser = (req as any).user;
 
+    console.log('[DELETE USER] Attempting to delete user id:', id, 'by:', currentUser?.email, 'role:', currentUser?.role);
+
+    if (!currentUser) {
+      console.log('[DELETE USER] No currentUser found');
+      return reply.status(401).send({ success: false, error: 'Tidak terautentikasi' });
+    }
+
     if (id === currentUser.id) {
+      console.log('[DELETE USER] User trying to delete self');
       return reply.status(400).send({ success: false, error: 'Tidak dapat menghapus akun Anda sendiri' });
     }
 
     const targetUsers = await db.select().from(user).where(eq(user.id, id)).limit(1);
     const targetUser = targetUsers[0];
     if (!targetUser) {
+      console.log('[DELETE USER] Target user not found for id:', id);
       return reply.status(404).send({ success: false, error: 'Pengguna tidak ditemukan' });
     }
 
     if (targetUser.email === 'ghedev@gmail.com') {
+      console.log('[DELETE USER] Attempt to delete ghedev system account');
       return reply.status(400).send({ success: false, error: 'Akun developer sistem tidak dapat dihapus' });
     }
 
+    console.log('[DELETE USER] Proceeding to delete:', targetUser.email, 'role:', targetUser.role);
+
     try {
       // Execute each FK cleanup step independently with try/catch to ensure robust deletion
-      try { await db.execute(sql`DELETE FROM "session" WHERE "user_id" = ${id}`); } catch (e) { console.warn('Delete session warning:', e); }
-      try { await db.execute(sql`DELETE FROM "account" WHERE "user_id" = ${id}`); } catch (e) { console.warn('Delete account warning:', e); }
-
-      // Reassign transactions to current active user (preserve history)
-      try { await db.execute(sql`UPDATE "transactions" SET "user_id" = ${currentUser.id} WHERE "user_id" = ${id}`); } catch (e) { console.warn('Update tx user warning:', e); }
-
-      // Clean up operational data for target user
-      try { await db.execute(sql`DELETE FROM "stock_opname_items" WHERE "session_id" IN (SELECT "id" FROM "stock_opname_sessions" WHERE "user_id" = ${id})`); } catch (e) { console.warn('Delete opname items warning:', e); }
-      try { await db.execute(sql`DELETE FROM "stock_opname_sessions" WHERE "user_id" = ${id}`); } catch (e) { console.warn('Delete opname sessions warning:', e); }
-      try { await db.execute(sql`DELETE FROM "cash_shifts" WHERE "user_id" = ${id}`); } catch (e) { console.warn('Delete cash shifts warning:', e); }
-      try { await db.execute(sql`DELETE FROM "expenses" WHERE "user_id" = ${id}`); } catch (e) { console.warn('Delete expenses warning:', e); }
-      try { await db.execute(sql`UPDATE "logs" SET "user_id" = NULL WHERE "user_id" = ${id}`); } catch (e) { console.warn('Update logs warning:', e); }
+      try { await db.execute(sql`DELETE FROM "session" WHERE "user_id" = ${id}`); } catch (e: any) { console.warn('[DELETE USER] session cleanup:', e.message); }
+      try { await db.execute(sql`DELETE FROM "account" WHERE "user_id" = ${id}`); } catch (e: any) { console.warn('[DELETE USER] account cleanup:', e.message); }
+      try { await db.execute(sql`UPDATE "transactions" SET "user_id" = ${currentUser.id} WHERE "user_id" = ${id}`); } catch (e: any) { console.warn('[DELETE USER] tx reassign:', e.message); }
+      try { await db.execute(sql`DELETE FROM "stock_opname_items" WHERE "session_id" IN (SELECT "id" FROM "stock_opname_sessions" WHERE "user_id" = ${id})`); } catch (e: any) { console.warn('[DELETE USER] opname items:', e.message); }
+      try { await db.execute(sql`DELETE FROM "stock_opname_sessions" WHERE "user_id" = ${id}`); } catch (e: any) { console.warn('[DELETE USER] opname sessions:', e.message); }
+      try { await db.execute(sql`DELETE FROM "cash_shifts" WHERE "user_id" = ${id}`); } catch (e: any) { console.warn('[DELETE USER] cash shifts:', e.message); }
+      try { await db.execute(sql`DELETE FROM "expenses" WHERE "user_id" = ${id}`); } catch (e: any) { console.warn('[DELETE USER] expenses:', e.message); }
+      try { await db.execute(sql`UPDATE "logs" SET "user_id" = NULL WHERE "user_id" = ${id}`); } catch (e: any) { console.warn('[DELETE USER] logs nullify:', e.message); }
 
       // Final delete target user record
       await db.execute(sql`DELETE FROM "user" WHERE "id" = ${id}`);
 
+      console.log('[DELETE USER] Successfully deleted user:', targetUser.email);
       await createAuditLog(req, 'user.deleted', `User ${targetUser.email} deleted`);
       return reply.send({ success: true, message: 'Pengguna berhasil dihapus' });
     } catch (err: any) {
-      console.error('Delete user error:', err);
+      console.error('[DELETE USER] FINAL ERROR:', err.message, err.stack);
       return reply.status(500).send({ success: false, error: 'Gagal menghapus pengguna: ' + (err.message || String(err)) });
     }
   });

@@ -282,6 +282,7 @@ async function start() {
   app.get('/api/health', async () => ({
     success: true,
     message: 'POS Yoga API is running',
+    version: '0.1.31',
     timestamp: new Date().toISOString(),
   }));
 
