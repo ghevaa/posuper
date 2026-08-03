@@ -175,7 +175,7 @@ export async function transactionRoutes(app: FastifyInstance) {
         paidAmount,
         changeAmount: changeAmount > 0 ? changeAmount : 0,
         paymentMethod,
-        items: items.map(i => ({ productName: i.productName, qty: i.qty, price: i.price, variantName: i.variantName || null })),
+        items: items.map(i => ({ productName: i.productName, qty: i.qty, price: i.price, variantName: i.variantName || null, note: i.note || null })),
       };
 
       if (paymentMethod === 'qris' && snapToken) {
@@ -385,6 +385,7 @@ export async function transactionRoutes(app: FastifyInstance) {
         productName: transactionItems.productName,
         variantName: transactionItems.variantName,
         qty: transactionItems.qty,
+        note: transactionItems.note,
       }).from(transactionItems).where(eq(transactionItems.transactionId, tx.id));
       return { ...tx, items };
     }));
