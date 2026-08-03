@@ -252,6 +252,10 @@ export interface ReceiptItem {
 
 export interface ReceiptData {
   storeName: string;
+  storeAddress?: string;
+  storePhone?: string;
+  receiptHeader?: string;
+  receiptFooter?: string;
   invoiceNo: string;
   cashierName: string;
   items: ReceiptItem[];
@@ -312,6 +316,22 @@ export async function printReceipt(receipt: ReceiptData): Promise<void> {
   addLine(receipt.storeName);
   lines.push(CMD.FONT_NORMAL);
   lines.push(CMD.BOLD_OFF);
+
+  if (receipt.storeAddress) {
+    const addrLines = wrapText(receipt.storeAddress, paperWidth);
+    for (const line of addrLines) {
+      addLine(line);
+    }
+  }
+  if (receipt.storePhone) {
+    addLine(`Telp: ${receipt.storePhone}`);
+  }
+  if (receipt.receiptHeader) {
+    const hdrLines = wrapText(receipt.receiptHeader, paperWidth);
+    for (const line of hdrLines) {
+      addLine(line);
+    }
+  }
   addLine('');
 
   // Invoice info
@@ -382,8 +402,15 @@ export async function printReceipt(receipt: ReceiptData): Promise<void> {
 
   // Footer
   lines.push(CMD.ALIGN_CENTER);
-  addLine('Terima Kasih!');
-  addLine('Selamat Menikmati');
+  if (receipt.receiptFooter) {
+    const ftrLines = wrapText(receipt.receiptFooter, paperWidth);
+    for (const line of ftrLines) {
+      addLine(line);
+    }
+  } else {
+    addLine('Terima Kasih!');
+    addLine('Selamat Menikmati');
+  }
 
   // 3 Feed Lines to push text past tear bar cleanly
   addLine('');

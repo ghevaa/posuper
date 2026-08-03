@@ -177,13 +177,23 @@ export default function POSPage() {
     return () => window.removeEventListener('keydown', handler);
   }, [search, products, addItem]);
 
+  const { data: settingsRes } = useQuery({
+    queryKey: ['settings'],
+    queryFn: () => api.get<{ data: Record<string, string> }>('/settings'),
+  });
+  const settings = settingsRes?.data || {};
+
   // --- Bluetooth Print Handler ---
   const handleBluetoothPrint = async () => {
     if (!lastTransaction) return;
     setPrinting(true);
     try {
       const receiptData: ReceiptData = {
-        storeName: "D'Mac Chicken Crunch",
+        storeName: settings.store_name || "D'Mac Chicken",
+        storeAddress: settings.store_address || undefined,
+        storePhone: settings.store_phone || undefined,
+        receiptHeader: settings.receipt_header || undefined,
+        receiptFooter: settings.receipt_footer || undefined,
         invoiceNo: lastTransaction.invoiceNo || '-',
         cashierName: user?.name || 'Kasir',
         items: (lastTransaction.items || items).map((i: any) => ({

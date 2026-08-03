@@ -7,10 +7,29 @@ import { nativePrintReceipt } from './native-ble-printer';
 import { Capacitor } from '@capacitor/core';
 import toast from 'react-hot-toast';
 
+import { api } from './api';
+
+let cachedSettings: Record<string, string> | null = null;
+
+async function getSettings(): Promise<Record<string, string>> {
+  try {
+    const res = await api.get<{ data: Record<string, string> }>('/settings');
+    cachedSettings = res.data || {};
+    return cachedSettings;
+  } catch {
+    return cachedSettings || {};
+  }
+}
+
 export async function printTransactionReceipt(txDetail: any, cashierNameFallback = 'Administrator') {
   try {
+    const settings = await getSettings();
     const payload: ReceiptData = {
-      storeName: "D'Mac Chicken Crunch",
+      storeName: settings.store_name || "D'Mac Chicken",
+      storeAddress: settings.store_address || undefined,
+      storePhone: settings.store_phone || undefined,
+      receiptHeader: settings.receipt_header || undefined,
+      receiptFooter: settings.receipt_footer || undefined,
       invoiceNo: txDetail.invoiceNo,
       date: new Date(txDetail.createdAt),
       cashierName: txDetail.userName || txDetail.user?.name || cashierNameFallback,
