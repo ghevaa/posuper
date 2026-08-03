@@ -6,7 +6,8 @@ import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { api } from '../lib/api';
 import { formatCurrency, formatDateTime } from '../lib/utils';
-import { Eye, X, Download, Loader2 } from 'lucide-react';
+import { Eye, X, Download, Loader2, Printer } from 'lucide-react';
+import { printTransactionReceipt } from '../lib/reprint-helper';
 import toast from 'react-hot-toast';
 
 export default function AdminTransactions() {
@@ -92,6 +93,15 @@ export default function AdminTransactions() {
               <div className="flex justify-between text-sm"><span>Diskon</span><span>-{formatCurrency(Number(detail.discount))}</span></div>
               <div className="flex justify-between text-sm"><span>Pajak</span><span>{formatCurrency(Number(detail.tax))}</span></div>
               <div className="flex justify-between font-bold text-lg pt-2"><span>Total</span><span className="gradient-text">{formatCurrency(Number(detail.total))}</span></div>
+            </div>
+            <div className="pt-4 mt-2 border-t border-[var(--color-border)]">
+              <button
+                onClick={() => printTransactionReceipt(detail, 'Administrator')}
+                className="btn btn-primary w-full gap-2 font-bold text-sm"
+              >
+                <Printer size={16} />
+                Cetak Ulang Struk
+              </button>
             </div>
           </div>
         </div>

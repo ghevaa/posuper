@@ -1267,8 +1267,16 @@ export default function POSPage() {
                 <span className="font-semibold">{formatCurrency(closingData.totalCashSales || closingData.totalCash || 0)}</span>
               </div>
               <div className="flex justify-between">
-                <span className="text-[var(--color-text-muted)]">Non-Tunai</span>
-                <span className="font-semibold text-blue-400">{formatCurrency(closingData.totalNonCash || 0)}</span>
+                <span className="text-[var(--color-text-muted)]">QRIS</span>
+                <span className="font-semibold text-blue-400">{formatCurrency(closingData.totalQris || 0)}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-[var(--color-text-muted)]">Transfer</span>
+                <span className="font-semibold text-blue-400">{formatCurrency(closingData.totalTransfer || 0)}</span>
+              </div>
+              <div className="flex justify-between pt-1 border-t border-[var(--color-border)] font-bold">
+                <span className="text-[var(--color-text-muted)]">Total Non-Tunai</span>
+                <span className="text-blue-400">{formatCurrency(closingData.totalNonCash || 0)}</span>
               </div>
             </div>
 
