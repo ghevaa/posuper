@@ -70,6 +70,7 @@ export async function exportRoutes(app: FastifyInstance) {
     const txIds = txList.map((t) => t.id);
     let itemsList: any[] = [];
     const itemsByTx: Record<string, any[]> = {};
+    const productSalesMap: Record<string, { productName: string; variantName: string; qty: number; price: number; subtotal: number }> = {};
 
     if (txIds.length > 0) {
       itemsList = await db.select({
@@ -89,14 +90,29 @@ export async function exportRoutes(app: FastifyInstance) {
         .orderBy(desc(transactions.createdAt));
 
       itemsList.forEach((item) => {
+        // Group by transaction
         if (!itemsByTx[item.transactionId]) itemsByTx[item.transactionId] = [];
         itemsByTx[item.transactionId].push(item);
+
+        // Aggregate product sales summary (for Sheet 3)
+        const key = `${item.productName}__${item.variantName || 'Biasa'}`;
+        if (!productSalesMap[key]) {
+          productSalesMap[key] = {
+            productName: item.productName,
+            variantName: item.variantName || 'Biasa / Regular',
+            qty: 0,
+            price: Number(item.price) || 0,
+            subtotal: 0,
+          };
+        }
+        productSalesMap[key].qty += Number(item.qty) || 0;
+        productSalesMap[key].subtotal += Number(item.subtotal) || 0;
       });
     }
 
     const workbook = new ExcelJS.Workbook();
 
-    // Sheet 1: Ringkasan Transaksi
+    // ─── Sheet 1: Ringkasan Invoice Transaksi ─────────────────
     const s1 = workbook.addWorksheet('Ringkasan Transaksi');
     s1.columns = [
       { header: 'No', key: 'no', width: 6 },
@@ -106,8 +122,7 @@ export async function exportRoutes(app: FastifyInstance) {
       { header: 'Kasir', key: 'cashier', width: 18 },
       { header: 'Tipe Pesanan', key: 'orderType', width: 16 },
       { header: 'Meja', key: 'tableNo', width: 10 },
-      { header: 'Detail Menu Dipilih', key: 'menuList', width: 32 },
-      { header: 'Varian & Sub Varian', key: 'variantList', width: 30 },
+      { header: 'Detail Menu', key: 'menuList', width: 32 },
       { header: 'Subtotal (Rp)', key: 'subtotal', width: 16 },
       { header: 'Diskon (Rp)', key: 'discount', width: 16 },
       { header: 'Total (Rp)', key: 'total', width: 16 },
@@ -122,19 +137,9 @@ export async function exportRoutes(app: FastifyInstance) {
       const d = new Date(t.createdAt);
       const txItems = itemsByTx[t.id] || [];
 
-      // Combine menu items: "1x fettucini\n2x ayam crispy"
+      // Clean menu summary list
       const menuList = txItems.length > 0
-        ? txItems.map((it) => `${it.qty}x ${it.productName}`).join('\n')
-        : '-';
-
-      // Combine variants & sub-variants: "fettucini (Pedas, Note: Less Oil)"
-      const variantList = txItems.length > 0
-        ? txItems.map((it) => {
-            const details = [];
-            if (it.variantName) details.push(`Varian: ${it.variantName}`);
-            if (it.note) details.push(`Sub/Note: ${it.note}`);
-            return details.length > 0 ? `${it.productName} -> ${details.join(' | ')}` : `${it.productName} (Tanpa Varian)`;
-          }).join('\n')
+        ? txItems.map((it) => `${it.productName}${it.variantName ? ` (${it.variantName})` : ''} x${it.qty}`).join(', ')
         : '-';
 
       const row = s1.addRow({
@@ -146,7 +151,6 @@ export async function exportRoutes(app: FastifyInstance) {
         orderType: t.orderType === 'take_away' ? 'Take Away' : 'Dine In',
         tableNo: t.tableNo || '-',
         menuList,
-        variantList,
         subtotal: Number(t.subtotal) || 0,
         discount: Number(t.discount) || 0,
         total: Number(t.total) || 0,
@@ -157,18 +161,14 @@ export async function exportRoutes(app: FastifyInstance) {
       totalSum += Number(t.total) || 0;
 
       row.eachCell((cell, colNumber) => {
-        const align = [1, 3, 4, 6, 7, 13, 14].includes(colNumber) ? 'center' : [10, 11, 12].includes(colNumber) ? 'right' : 'left';
+        const align = [1, 3, 4, 6, 7, 12, 13].includes(colNumber) ? 'center' : [9, 10, 11].includes(colNumber) ? 'right' : 'left';
         styleDataCell(cell, align);
-        if ([8, 9].includes(colNumber)) {
-          cell.alignment = { wrapText: true, vertical: 'top', horizontal: 'left' };
-        }
-        if ([10, 11, 12].includes(colNumber)) {
+        if ([9, 10, 11].includes(colNumber)) {
           cell.numFmt = '#,##0';
         }
       });
     });
 
-    // Total summary row
     if (txList.length > 0) {
       const totalRow = s1.addRow({
         no: '',
@@ -179,7 +179,6 @@ export async function exportRoutes(app: FastifyInstance) {
         orderType: '',
         tableNo: '',
         menuList: '',
-        variantList: '',
         subtotal: '',
         discount: '',
         total: totalSum,
@@ -188,46 +187,105 @@ export async function exportRoutes(app: FastifyInstance) {
       });
       totalRow.eachCell((cell, colNumber) => {
         styleHeaderCell(cell);
-        if (colNumber === 12) {
+        if (colNumber === 11) {
           cell.numFmt = '#,##0';
         }
       });
     }
 
-    // Sheet 2: Detail Item Transaksi (Line-by-line per Menu/Varian)
-    const s2 = workbook.addWorksheet('Detail Item Transaksi');
+    // ─── Sheet 2: Rekapan Penjualan Per Produk (Persis Contoh Klien) ───
+    const s2 = workbook.addWorksheet('Rekapan Penjualan Produk');
     s2.columns = [
       { header: 'No', key: 'no', width: 6 },
-      { header: 'No Invoice', key: 'invoiceNo', width: 22 },
-      { header: 'Tanggal', key: 'date', width: 14 },
-      { header: 'Nama Menu', key: 'productName', width: 28 },
+      { header: 'Nama Produk', key: 'productName', width: 30 },
       { header: 'Varian', key: 'variantName', width: 24 },
-      { header: 'Sub Varian / Catatan', key: 'note', width: 26 },
-      { header: 'Qty', key: 'qty', width: 8 },
-      { header: 'Harga Satuan (Rp)', key: 'price', width: 18 },
-      { header: 'Subtotal (Rp)', key: 'subtotal', width: 18 },
+      { header: 'Jumlah Terjual', key: 'qty', width: 16 },
+      { header: 'Harga Satuan (Rp)', key: 'price', width: 20 },
+      { header: 'Total Revenue (Rp)', key: 'revenue', width: 22 },
     ];
 
     s2.getRow(1).eachCell((cell) => styleHeaderCell(cell));
 
+    const salesList = Object.values(productSalesMap).sort((a, b) => b.qty - a.qty);
+    let totalQtySum = 0;
+    let totalRevenueSum = 0;
+
+    salesList.forEach((item, i) => {
+      totalQtySum += item.qty;
+      totalRevenueSum += item.subtotal;
+
+      const row = s2.addRow({
+        no: i + 1,
+        productName: item.productName,
+        variantName: item.variantName,
+        qty: item.qty,
+        price: item.price,
+        revenue: item.subtotal,
+      });
+
+      row.eachCell((cell, colNumber) => {
+        const align = colNumber === 1 ? 'center' : [4, 5, 6].includes(colNumber) ? 'right' : 'left';
+        styleDataCell(cell, align);
+        if (colNumber === 4) {
+          cell.numFmt = '#,##0';
+        }
+        if ([5, 6].includes(colNumber)) {
+          cell.numFmt = '#,##0';
+        }
+      });
+    });
+
+    if (salesList.length > 0) {
+      const summaryRow = s2.addRow({
+        no: '',
+        productName: 'TOTAL TERJUAL',
+        variantName: '',
+        qty: totalQtySum,
+        price: '',
+        revenue: totalRevenueSum,
+      });
+      summaryRow.eachCell((cell, colNumber) => {
+        styleHeaderCell(cell);
+        if (colNumber === 4 || colNumber === 6) {
+          cell.numFmt = '#,##0';
+        }
+      });
+    }
+
+    // ─── Sheet 3: Detail Transaksi Per Baris ─────────────────
+    const s3 = workbook.addWorksheet('Detail Items Per Baris');
+    s3.columns = [
+      { header: 'No', key: 'no', width: 6 },
+      { header: 'No Invoice', key: 'invoiceNo', width: 22 },
+      { header: 'Tanggal', key: 'date', width: 14 },
+      { header: 'Nama Produk', key: 'productName', width: 28 },
+      { header: 'Varian', key: 'variantName', width: 24 },
+      { header: 'Jumlah Terjual', key: 'qty', width: 16 },
+      { header: 'Harga Satuan (Rp)', key: 'price', width: 18 },
+      { header: 'Subtotal (Rp)', key: 'subtotal', width: 18 },
+      { header: 'Catatan Item', key: 'note', width: 24 },
+    ];
+
+    s3.getRow(1).eachCell((cell) => styleHeaderCell(cell));
+
     itemsList.forEach((it, i) => {
       const d = it.createdAt ? new Date(it.createdAt) : new Date();
-      const row = s2.addRow({
+      const row = s3.addRow({
         no: i + 1,
         invoiceNo: it.invoiceNo || '-',
         date: d.toLocaleDateString('id-ID'),
         productName: it.productName,
         variantName: it.variantName || 'Biasa / Regular',
-        note: it.note || '-',
-        qty: it.qty,
+        qty: Number(it.qty) || 0,
         price: Number(it.price) || 0,
         subtotal: Number(it.subtotal) || 0,
+        note: it.note || '-',
       });
 
       row.eachCell((cell, colNumber) => {
-        const align = [1, 3, 7].includes(colNumber) ? 'center' : [8, 9].includes(colNumber) ? 'right' : 'left';
+        const align = [1, 3].includes(colNumber) ? 'center' : [6, 7, 8].includes(colNumber) ? 'right' : 'left';
         styleDataCell(cell, align);
-        if ([8, 9].includes(colNumber)) {
+        if ([6, 7, 8].includes(colNumber)) {
           cell.numFmt = '#,##0';
         }
       });

@@ -189,6 +189,19 @@ export async function stockOpnameRoutes(app: FastifyInstance) {
       return reply.status(404).send({ success: false, error: 'Stock opname session not found' });
     }
 
+    // Fetch products with categories to group items by category
+    const allProducts = await db.select({
+      id: products.id,
+      categoryName: categories.name,
+    })
+      .from(products)
+      .leftJoin(categories, eq(products.categoryId, categories.id));
+
+    const categoryMap = new Map<string, string>();
+    allProducts.forEach((p) => {
+      if (p.id) categoryMap.set(p.id, p.categoryName || 'Bahan & Produk Umum');
+    });
+
     const workbook = new ExcelJS.Workbook();
     const sheet = workbook.addWorksheet('Stok Opname');
 
@@ -219,13 +232,13 @@ export async function stockOpnameRoutes(app: FastifyInstance) {
     const headerRowNum = session.notes ? 4 : 3;
     const headers = [
       'No',
-      'Nama Bahan Utama',
+      'NAMA BAHAN UTAMA',
       'SAT',
-      'Stok Awal (Pagi)',
-      'Barang Masuk',
-      'Stok Fisik Riil (Malam)',
-      'Pemakaian Terhitung',
-      'Keterangan / Rusak (Waste)',
+      'STOK AWAL',
+      'BARANG MASUK',
+      'STOK FISIK RIIL',
+      'PEMAKAIAN TERHITUNG',
+      'KETERANGAN / WASTE',
     ];
 
     const headerRow = sheet.getRow(headerRowNum);
@@ -236,7 +249,7 @@ export async function stockOpnameRoutes(app: FastifyInstance) {
       cell.fill = {
         type: 'pattern',
         pattern: 'solid',
-        fgColor: { argb: 'FF009688' }, // Teal/cyan
+        fgColor: { argb: 'FF00B050' }, // Bright Green / Cyan header like client screenshot
       };
       cell.alignment = { horizontal: 'center', vertical: 'middle', wrapText: true };
       cell.border = {
@@ -249,43 +262,85 @@ export async function stockOpnameRoutes(app: FastifyInstance) {
     headerRow.height = 28;
 
     // ── Column widths ──
-    sheet.getColumn(1).width = 5;   // No
-    sheet.getColumn(2).width = 30;  // Nama Bahan
-    sheet.getColumn(3).width = 8;   // SAT
+    sheet.getColumn(1).width = 6;   // No
+    sheet.getColumn(2).width = 34;  // Nama Bahan
+    sheet.getColumn(3).width = 10;  // SAT
     sheet.getColumn(4).width = 16;  // Stok Awal
-    sheet.getColumn(5).width = 14;  // Barang Masuk
-    sheet.getColumn(6).width = 22;  // Stok Fisik Riil
-    sheet.getColumn(7).width = 20;  // Pemakaian
+    sheet.getColumn(5).width = 16;  // Barang Masuk
+    sheet.getColumn(6).width = 20;  // Stok Fisik Riil
+    sheet.getColumn(7).width = 22;  // Pemakaian
     sheet.getColumn(8).width = 24;  // Waste
 
-    // ── Data rows ──
-    session.items.forEach((item, idx) => {
-      const rowNum = headerRowNum + 1 + idx;
-      const row = sheet.getRow(rowNum);
+    // ── Group items by Category ──
+    const itemsGrouped: Record<string, typeof session.items> = {};
+    session.items.forEach((item) => {
+      const catName = (item.productId && categoryMap.get(item.productId)) || 'Bahan Baku & Produk Umum';
+      if (!itemsGrouped[catName]) itemsGrouped[catName] = [];
+      itemsGrouped[catName].push(item);
+    });
 
-      // Column letters for formula: D=StokAwal, E=BarangMasuk, F=StokRiil
-      row.getCell(1).value = idx + 1;                    // No
-      row.getCell(2).value = item.productName;            // Nama Bahan
-      row.getCell(3).value = item.unit;                   // SAT
-      row.getCell(4).value = item.stockStart;             // Stok Awal
-      row.getCell(5).value = item.stockIn;                // Barang Masuk
-      row.getCell(6).value = item.stockReal;              // Stok Fisik Riil
-      row.getCell(7).value = { formula: `D${rowNum}+E${rowNum}-F${rowNum}` }; // Pemakaian
-      row.getCell(8).value = item.waste;                  // Waste
+    let currentRowNum = headerRowNum + 1;
+    let categoryCharIndex = 65; // 'A'
 
-      // Borders for data cells
-      for (let c = 1; c <= 8; c++) {
-        const cell = row.getCell(c);
+    Object.entries(itemsGrouped).forEach(([categoryName, groupItems]) => {
+      // Add Category Section Header Row (e.g., "A. Kelompok Daging & Ayam")
+      const catRow = sheet.getRow(currentRowNum);
+      const catLetter = String.fromCharCode(categoryCharIndex++);
+      catRow.getCell(1).value = catLetter;
+      catRow.getCell(2).value = categoryName;
+
+      sheet.mergeCells(`B${currentRowNum}:H${currentRowNum}`);
+
+      catRow.eachCell((cell) => {
+        cell.font = { bold: true, italic: true, color: { argb: 'FF004B49' } };
+        cell.fill = {
+          type: 'pattern',
+          pattern: 'solid',
+          fgColor: { argb: 'FF00E5FF' }, // Cyan highlight for category banner like screenshot
+        };
         cell.border = {
           top: { style: 'thin' },
           left: { style: 'thin' },
           bottom: { style: 'thin' },
           right: { style: 'thin' },
         };
-        if (c >= 3) {
-          cell.alignment = { horizontal: 'center' };
+      });
+      catRow.height = 22;
+      currentRowNum++;
+
+      // Data rows under this category
+      groupItems.forEach((item, idx) => {
+        const row = sheet.getRow(currentRowNum);
+        const formulaRow = currentRowNum;
+
+        row.getCell(1).value = idx + 1;
+        row.getCell(2).value = item.productName;
+        row.getCell(3).value = item.unit || 'Pcs';
+        row.getCell(4).value = Number(item.stockStart) || 0;
+        row.getCell(5).value = Number(item.stockIn) || 0;
+        row.getCell(6).value = Number(item.stockReal) || 0;
+        row.getCell(7).value = { formula: `D${formulaRow}+E${formulaRow}-F${formulaRow}` };
+        row.getCell(8).value = item.notes || item.waste || '-';
+
+        for (let c = 1; c <= 8; c++) {
+          const cell = row.getCell(c);
+          cell.border = {
+            top: { style: 'thin' },
+            left: { style: 'thin' },
+            bottom: { style: 'thin' },
+            right: { style: 'thin' },
+          };
+          if (c === 1 || c === 3) {
+            cell.alignment = { horizontal: 'center' };
+          } else if (c >= 4 && c <= 7) {
+            cell.alignment = { horizontal: 'right' };
+            cell.numFmt = '#,##0';
+          } else {
+            cell.alignment = { horizontal: 'left' };
+          }
         }
-      }
+        currentRowNum++;
+      });
     });
 
     // Generate buffer and send
