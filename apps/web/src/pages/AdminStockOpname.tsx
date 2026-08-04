@@ -310,6 +310,7 @@ export default function AdminStockOpname() {
                       <th style={{ width: '90px' }}>Total Stok</th>
                       <th style={{ width: '100px' }}>Stok Fisik (Riil)</th>
                       <th style={{ width: '80px' }}>Terpakai</th>
+                      <th style={{ width: '80px' }}>Selisih</th>
                       <th style={{ width: '130px' }}>Keterangan / Rusak</th>
                       <th style={{ width: '36px' }}></th>
                     </tr>
@@ -407,6 +408,16 @@ export default function AdminStockOpname() {
                               {item.usage}
                             </span>
                           </td>
+                          <td className="text-center">
+                            {(() => {
+                              const selisih = (item.stockReal || 0) - totalStock;
+                              return (
+                                <span className={`font-bold ${selisih < 0 ? 'text-red-400' : selisih > 0 ? 'text-emerald-400' : 'text-[var(--color-text-dim)]'}`}>
+                                  {selisih > 0 ? `+${selisih}` : selisih}
+                                </span>
+                              );
+                            })()}
+                          </td>
                           <td>
                             <input
                               className="input text-xs p-1"
@@ -436,7 +447,7 @@ export default function AdminStockOpname() {
 
         <div className="glass-card p-4">
           <p className="text-xs text-[var(--color-text-dim)]">
-            💡 Rumus: <strong>Total Stok = Qty Awal + Barang Masuk</strong>, <strong>Terpakai = Total Stok - Stok Fisik (Riil)</strong>.
+            💡 Rumus: <strong>Total Stok = Qty Awal + Barang Masuk</strong> | <strong>Terpakai = Total Stok - Stok Fisik (Riil)</strong> | <strong>Selisih = Stok Fisik (Riil) - Total Stok</strong>.
             Klik ikon kalender untuk mencatat barang masuk di tanggal tertentu. Klik "Simpan" untuk menyimpan perubahan, atau "Export Excel" untuk mengunduh rekap lengkap per kategori.
           </p>
         </div>

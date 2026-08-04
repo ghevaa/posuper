@@ -289,7 +289,146 @@ export async function stockOpnameRoutes(app: FastifyInstance) {
     const sortedDates = Array.from(dateSet).sort();
 
     const workbook = new ExcelJS.Workbook();
-    const sheet = workbook.addWorksheet('Stok Opname');
+    const sheet = workbook.addWorksheet('Stok Opname', {
+      pageSetup: {
+        orientation: 'landscape',
+        fitToPage: true,
+        fitToWidth: 1,
+        fitToHeight: 0,
+        margins: { left: 0.3, right: 0.3, top: 0.4, bottom: 0.4, header: 0.2, footer: 0.2 },
+      },
+    });
+
+    const dateStr = new Date(session.date).toLocaleDateString('id-ID', {
+      day: '2-digit',
+      month: 'long',
+      year: 'numeric',
+    });
+
+    // Column layout: No | Nama Bahan | Sat | Qty Awal | [tanggal...] | Total Stok | Stok Fisik | Terpakai | Selisih | Keterangan
+    const fixedColsBefore = 4; // No, Nama, Sat, Qty Awal
+    const dateColCount = sortedDates.length;
+    const totalCols = fixedColsBefore + dateColCount + 5; // + Total Stok, Stok Fisik, Terpakai, Selisih, Keterangan
+
+    const colLetter = (n: number) => {
+      let s = '';
+      while (n > 0) {
+        const m = (n - 1) % 26;
+        s = String.fromCharCode(65 + m) + s;
+        n = Math.floor((n - m) / 26);
+      }
+      return s;
+    };
+    const lastColLetter = colLetter(totalCols);
+
+    // ── Title row ──
+    sheet.mergeCells(`A1:${lastColLetter}1`);
+    const titleCell = sheet.getCell('A1');
+    titleCell.value = `${session.name} — ${dateStr}`;
+    titleCell.font = { bold: true, size: 14 };
+    titleCell.alignment = { horizontal: 'center', vertical: 'middle' };
+    sheet.getRow(1).height = 30;
+
+    if (session.notes) {
+      sheet.mergeCells(`A2:${lastColLetter}2`);
+      const notesCell = sheet.getCell('A2');
+      notesCell.value = `Catatan: ${session.notes}`;
+      notesCell.font = { italic: true, size: 10 };
+    }
+
+    const headerRowNum = session.notes ? 4 : 3;
+    const barangMasukStartCol = fixedColsBefore + 1;
+    const barangMasukEndCol = fixedColsBefore + dateColCount;
+    const totalStokCol = barangMasukEndCol + 1;
+    const stokFisikCol = totalStokCol + 1;
+    const terpakaiCol = stokFisikCol + 1;
+    const selisihCol = terpakaiCol + 1;
+    const keteranganCol = selisihCol + 1;
+
+    // ── Header row 1: group labels ──
+    const headerRow1 = sheet.getRow(headerRowNum);
+    ['No', 'NAMA BAHAN UTAMA', 'SAT', 'QTY AWAL'].forEach((label, i) => {
+      sheet.mergeCells(headerRowNum, i + 1, headerRowNum + 1, i + 1);
+      const cell = headerRow1.getCell(i + 1);
+      cell.value = label;
+    });
+    if (dateColCount > 0) {
+      sheet.mergeCells(headerRowNum, barangMasukStartCol, headerRowNum, barangMasukEndCol);
+      headerRow1.getCell(barangMasukStartCol).value = 'BARANG MASUK (TANGGAL)';
+    }
+    [
+      [totalStokCol, 'TOTAL STOK'],
+      [stokFisikCol, 'STOK FISIK\n(RIIL)'],
+      [terpakaiCol, 'TERPAKAI'],
+      [selisihCol, 'SELISIH'],
+      [keteranganCol, 'KETERANGAN\n/ RUSAK'],
+    ].forEach(([col, label]) => {
+      sheet.mergeCells(headerRowNum, col as number, headerRowNum + 1, col as number);
+      headerRow1.getCell(col as number).value = label;
+    });
+
+    // ── Header row 2: individual dates ──
+    const headerRow2 = sheet.getRow(headerRowNum + 1);
+    sortedDates.forEach((d, i) => {
+      const day = new Date(d).getDate();
+      headerRow2.getCell(barangMasukStartCol + i).value = day;
+    });
+
+    // Style both header rows
+    [headerRow1, headerRow2].forEach((row) => {
+      for (let c = 1; c <= totalCols; c++) {
+        const cell = row.getCell(c);
+        cell.font = { bold: true, color: { argb: 'FFFFFFFF' }, size: 10 };
+        cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF00B050' } };
+        cell.alignment = { horizontal: 'center', vertical: 'middle', wrapText: true };
+        cell.border = { top: { style: 'thin' }, left: { style: 'thin' }, bottom: { style: 'thin' }, right: { style: 'thin' } };
+      }
+    });
+    headerRow1.height = 22;
+    headerRow2.height = 18;
+
+    // ── Column widths ──
+    sheet.getColumn(1).width = 5;
+    sheet.getColumn(2).width = 30;
+    sheet.getColumn(3).width = 8;
+    sheet.getColumn(4).width = 11;
+    for (let i = 0; i < dateColCount; i++) sheet.getColumn(barangMasukStartCol + i).width = 7;
+    sheet.getColumn(totalStokCol).width = 11;
+    sheet.getColumn(stokFisikCol).width = 11;
+    sheet.getColumn(terpakaiCol).width = 11;
+    sheet.getColumn(selisihCol).width = 10;
+    sheet.getColumn(keteranganCol).width = 20;
+
+    // ── Group items by stock-opname category ──
+    const itemsGrouped: Record<string, typeof session.items> = {};
+    session.items.forEach((item) => {
+      const catName = (item.categoryId && categoryNameMap.get(item.categoryId)) || 'Tanpa Kategori';
+      if (!itemsGrouped[catName]) itemsGrouped[catName] = [];
+      itemsGrouped[catName].push(item);
+    });
+
+    let currentRowNum = headerRowNum + 2;
+    let categoryCharIndex = 65; // 'A'
+
+    Object.entries(itemsGrouped).forEach(([categoryName, groupItems]) => {
+      const catRow = sheet.getRow(currentRowNum);
+      const catLetter = String.fromCharCode(categoryCharIndex++);
+      catRow.getCell(1).value = catLetter;
+      catRow.getCell(2).value = categoryName;
+      sheet.mergeCells(currentRowNum, 2, currentRowNum, totalCols);
+
+      catRow.eachCell((cell) => {
+        cell.font = { bold: true, italic: true, color: { argb: 'FF004B49' } };
+        cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF00E5FF' } };
+        cell.border = { top: { style: 'thin' }, left: { style: 'thin' }, bottom: { style: 'thin' }, right: { style: 'thin' } };
+      });
+      catRow.height = 20;
+      currentRowNum++;
+
+      groupItems.forEach((item, idx) => {
+        const row = sheet.getRow(currentRowNum);
+        const entries = (item.stockInEntries as StockInEntry[]) || [];
+    });
 
     const dateStr = new Date(session.date).toLocaleDateString('id-ID', {
       day: '2-digit',
@@ -421,9 +560,12 @@ export async function stockOpnameRoutes(app: FastifyInstance) {
         const row = sheet.getRow(currentRowNum);
         const entries = (item.stockInEntries as StockInEntry[]) || [];
         const entryMap = new Map(entries.map((e) => [e.date, e.qty]));
-        const totalStock = (item.stockStart || 0) + sumEntries(entries);
-        const terpakai = totalStock - (item.stockReal || 0);
-        const selisih = terpakai - (item.waste || 0);
+
+        // Column letters for formula calculations
+        const totColL = colLetter(totalStokCol);
+        const stokFisikColL = colLetter(stokFisikCol);
+        const startMasukL = dateColCount > 0 ? colLetter(barangMasukStartCol) : '';
+        const endMasukL = dateColCount > 0 ? colLetter(barangMasukEndCol) : '';
 
         row.getCell(1).value = idx + 1;
         row.getCell(2).value = item.productName;
@@ -435,15 +577,24 @@ export async function stockOpnameRoutes(app: FastifyInstance) {
           if (qty !== undefined) row.getCell(barangMasukStartCol + i).value = qty;
         });
 
-        row.getCell(totalStokCol).value = totalStock;
+        // Dynamic Excel Formulas
+        if (dateColCount > 0) {
+          row.getCell(totalStokCol).value = { formula: `D${currentRowNum}+SUM(${startMasukL}${currentRowNum}:${endMasukL}${currentRowNum})` };
+        } else {
+          row.getCell(totalStokCol).value = { formula: `D${currentRowNum}` };
+        }
+
         row.getCell(stokFisikCol).value = item.stockReal || 0;
-        row.getCell(terpakaiCol).value = terpakai;
-        row.getCell(selisihCol).value = selisih;
+        row.getCell(terpakaiCol).value = { formula: `${totColL}${currentRowNum}-${stokFisikColL}${currentRowNum}` };
+        row.getCell(selisihCol).value = { formula: `${stokFisikColL}${currentRowNum}-${totColL}${currentRowNum}` };
         row.getCell(keteranganCol).value = item.notes || (item.waste ? `Rusak: ${item.waste}` : '-');
 
         for (let c = 1; c <= totalCols; c++) {
           const cell = row.getCell(c);
           cell.border = { top: { style: 'thin' }, left: { style: 'thin' }, bottom: { style: 'thin' }, right: { style: 'thin' } };
+          if (c === totalStokCol || c === stokFisikCol || c === terpakaiCol || c === selisihCol) {
+            cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFBFBFBF' } };
+          }
           if (c === 1 || c === 3) {
             cell.alignment = { horizontal: 'center' };
           } else if (c >= 4 && c <= keteranganCol - 1) {
