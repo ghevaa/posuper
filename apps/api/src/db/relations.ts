@@ -19,6 +19,7 @@ import {
   productVariants,
   stockOpnameSessions,
   stockOpnameItems,
+  stockOpnameCategories,
   categoryOptionGroups,
   categoryOptions,
 } from './schema.js';
@@ -155,4 +156,10 @@ export const stockOpnameSessionRelations = relations(stockOpnameSessions, ({ one
 export const stockOpnameItemRelations = relations(stockOpnameItems, ({ one }) => ({
   session: one(stockOpnameSessions, { fields: [stockOpnameItems.sessionId], references: [stockOpnameSessions.id] }),
   product: one(products, { fields: [stockOpnameItems.productId], references: [products.id] }),
+  category: one(stockOpnameCategories, { fields: [stockOpnameItems.categoryId], references: [stockOpnameCategories.id] }),
+}));
+
+// --- Stock Opname Category Relations ---
+export const stockOpnameCategoryRelations = relations(stockOpnameCategories, ({ many }) => ({
+  items: many(stockOpnameItems),
 }));

@@ -11,6 +11,7 @@ import {
   numeric,
   index,
   pgEnum,
+  jsonb,
 } from 'drizzle-orm/pg-core';
 
 // --- Enums ---
@@ -315,6 +316,17 @@ export const stockOpnameSessions = pgTable(
   (table) => [index('stock_opname_sessions_date_idx').on(table.date)],
 );
 
+// --- Stock Opname Categories (Kelompok Bahan, mis. "Kelompok Daging & Ayam") ---
+export const stockOpnameCategories = pgTable(
+  'stock_opname_categories',
+  {
+    id: text('id').primaryKey(),
+    name: text('name').notNull(),
+    sortOrder: integer('sort_order').notNull().default(0),
+    createdAt: timestamp('created_at').defaultNow().notNull(),
+  },
+);
+
 // --- Stock Opname Items ---
 export const stockOpnameItems = pgTable(
   'stock_opname_items',
@@ -322,14 +334,19 @@ export const stockOpnameItems = pgTable(
     id: text('id').primaryKey(),
     sessionId: text('session_id').notNull().references(() => stockOpnameSessions.id, { onDelete: 'cascade' }),
     productId: text('product_id').references(() => products.id, { onDelete: 'set null' }),
+    categoryId: text('category_id').references(() => stockOpnameCategories.id, { onDelete: 'set null' }),
     productName: text('product_name').notNull(),
     unit: text('unit').notNull().default('Pcs'),
     stockStart: integer('stock_start').notNull().default(0),
     stockIn: integer('stock_in').notNull().default(0),
+    stockInEntries: jsonb('stock_in_entries').notNull().default([]),
     stockReal: integer('stock_real').notNull().default(0),
     usage: integer('usage').notNull().default(0),
     waste: integer('waste').notNull().default(0),
     notes: text('notes'),
   },
-  (table) => [index('stock_opname_items_sessionId_idx').on(table.sessionId)],
+  (table) => [
+    index('stock_opname_items_sessionId_idx').on(table.sessionId),
+    index('stock_opname_items_categoryId_idx').on(table.categoryId),
+  ],
 );
