@@ -582,10 +582,12 @@ export default function AdminStockOpname() {
                   <td className="text-[var(--color-text-muted)]">{formatDate(s.date)}</td>
                   <td>{s.itemCount ?? '-'} item</td>
                   <td>
-                    <div className="flex gap-1">
+                    <div className="flex items-center gap-2">
                       <button onClick={() => { setSelectedSession(s.id); setEditItems([]); }} className="btn btn-secondary btn-sm">Lihat</button>
-                      <button onClick={() => handleExport(s.id)} className="btn btn-ghost btn-icon btn-sm"><Download size={14} /></button>
-                      <button onClick={() => { if (confirm('Hapus stok opname ini?')) deleteMutation.mutate(s.id); }} className="btn btn-ghost btn-icon btn-sm text-red-400"><Trash2 size={14} /></button>
+                      <button onClick={() => handleExport(s.id)} className="btn btn-secondary btn-sm flex items-center gap-1.5" title="Export ke Excel">
+                        <Download size={14} /> Export Excel
+                      </button>
+                      <button onClick={() => { if (confirm('Hapus stok opname ini?')) deleteMutation.mutate(s.id); }} className="btn btn-ghost btn-icon btn-sm text-red-400" title="Hapus"><Trash2 size={14} /></button>
                     </div>
                   </td>
                 </tr>
