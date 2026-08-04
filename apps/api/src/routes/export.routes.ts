@@ -66,9 +66,11 @@ export async function exportRoutes(app: FastifyInstance) {
       .where(and(gte(transactions.createdAt, startDate), lte(transactions.createdAt, endDate)))
       .orderBy(desc(transactions.createdAt));
 
-    // Fetch transaction items
+    // Fetch transaction items with details
     const txIds = txList.map((t) => t.id);
     let itemsList: any[] = [];
+    const itemsByTx: Record<string, any[]> = {};
+
     if (txIds.length > 0) {
       itemsList = await db.select({
         transactionId: transactionItems.transactionId,
@@ -85,6 +87,11 @@ export async function exportRoutes(app: FastifyInstance) {
         .leftJoin(transactions, eq(transactionItems.transactionId, transactions.id))
         .where(and(gte(transactions.createdAt, startDate), lte(transactions.createdAt, endDate)))
         .orderBy(desc(transactions.createdAt));
+
+      itemsList.forEach((item) => {
+        if (!itemsByTx[item.transactionId]) itemsByTx[item.transactionId] = [];
+        itemsByTx[item.transactionId].push(item);
+      });
     }
 
     const workbook = new ExcelJS.Workbook();
@@ -99,6 +106,8 @@ export async function exportRoutes(app: FastifyInstance) {
       { header: 'Kasir', key: 'cashier', width: 18 },
       { header: 'Tipe Pesanan', key: 'orderType', width: 16 },
       { header: 'Meja', key: 'tableNo', width: 10 },
+      { header: 'Detail Menu Dipilih', key: 'menuList', width: 32 },
+      { header: 'Varian & Sub Varian', key: 'variantList', width: 30 },
       { header: 'Subtotal (Rp)', key: 'subtotal', width: 16 },
       { header: 'Diskon (Rp)', key: 'discount', width: 16 },
       { header: 'Total (Rp)', key: 'total', width: 16 },
@@ -111,6 +120,23 @@ export async function exportRoutes(app: FastifyInstance) {
     let totalSum = 0;
     txList.forEach((t, i) => {
       const d = new Date(t.createdAt);
+      const txItems = itemsByTx[t.id] || [];
+
+      // Combine menu items: "1x fettucini\n2x ayam crispy"
+      const menuList = txItems.length > 0
+        ? txItems.map((it) => `${it.qty}x ${it.productName}`).join('\n')
+        : '-';
+
+      // Combine variants & sub-variants: "fettucini (Pedas, Note: Less Oil)"
+      const variantList = txItems.length > 0
+        ? txItems.map((it) => {
+            const details = [];
+            if (it.variantName) details.push(`Varian: ${it.variantName}`);
+            if (it.note) details.push(`Sub/Note: ${it.note}`);
+            return details.length > 0 ? `${it.productName} -> ${details.join(' | ')}` : `${it.productName} (Tanpa Varian)`;
+          }).join('\n')
+        : '-';
+
       const row = s1.addRow({
         no: i + 1,
         invoiceNo: t.invoiceNo,
@@ -119,6 +145,8 @@ export async function exportRoutes(app: FastifyInstance) {
         cashier: t.cashierName || '-',
         orderType: t.orderType === 'take_away' ? 'Take Away' : 'Dine In',
         tableNo: t.tableNo || '-',
+        menuList,
+        variantList,
         subtotal: Number(t.subtotal) || 0,
         discount: Number(t.discount) || 0,
         total: Number(t.total) || 0,
@@ -129,9 +157,12 @@ export async function exportRoutes(app: FastifyInstance) {
       totalSum += Number(t.total) || 0;
 
       row.eachCell((cell, colNumber) => {
-        const align = [1, 3, 4, 6, 7, 11, 12].includes(colNumber) ? 'center' : [8, 9, 10].includes(colNumber) ? 'right' : 'left';
+        const align = [1, 3, 4, 6, 7, 13, 14].includes(colNumber) ? 'center' : [10, 11, 12].includes(colNumber) ? 'right' : 'left';
         styleDataCell(cell, align);
-        if ([8, 9, 10].includes(colNumber)) {
+        if ([8, 9].includes(colNumber)) {
+          cell.alignment = { wrapText: true, vertical: 'top', horizontal: 'left' };
+        }
+        if ([10, 11, 12].includes(colNumber)) {
           cell.numFmt = '#,##0';
         }
       });
@@ -147,6 +178,8 @@ export async function exportRoutes(app: FastifyInstance) {
         cashier: '',
         orderType: '',
         tableNo: '',
+        menuList: '',
+        variantList: '',
         subtotal: '',
         discount: '',
         total: totalSum,
@@ -155,24 +188,24 @@ export async function exportRoutes(app: FastifyInstance) {
       });
       totalRow.eachCell((cell, colNumber) => {
         styleHeaderCell(cell);
-        if (colNumber === 10) {
+        if (colNumber === 12) {
           cell.numFmt = '#,##0';
         }
       });
     }
 
-    // Sheet 2: Detail Item
+    // Sheet 2: Detail Item Transaksi (Line-by-line per Menu/Varian)
     const s2 = workbook.addWorksheet('Detail Item Transaksi');
     s2.columns = [
       { header: 'No', key: 'no', width: 6 },
       { header: 'No Invoice', key: 'invoiceNo', width: 22 },
       { header: 'Tanggal', key: 'date', width: 14 },
-      { header: 'Nama Produk', key: 'productName', width: 28 },
-      { header: 'Varian / Addon', key: 'variantName', width: 24 },
+      { header: 'Nama Menu', key: 'productName', width: 28 },
+      { header: 'Varian', key: 'variantName', width: 24 },
+      { header: 'Sub Varian / Catatan', key: 'note', width: 26 },
       { header: 'Qty', key: 'qty', width: 8 },
       { header: 'Harga Satuan (Rp)', key: 'price', width: 18 },
       { header: 'Subtotal (Rp)', key: 'subtotal', width: 18 },
-      { header: 'Catatan Item', key: 'note', width: 24 },
     ];
 
     s2.getRow(1).eachCell((cell) => styleHeaderCell(cell));
@@ -184,17 +217,17 @@ export async function exportRoutes(app: FastifyInstance) {
         invoiceNo: it.invoiceNo || '-',
         date: d.toLocaleDateString('id-ID'),
         productName: it.productName,
-        variantName: it.variantName || '-',
+        variantName: it.variantName || 'Biasa / Regular',
+        note: it.note || '-',
         qty: it.qty,
         price: Number(it.price) || 0,
         subtotal: Number(it.subtotal) || 0,
-        note: it.note || '-',
       });
 
       row.eachCell((cell, colNumber) => {
-        const align = [1, 3, 6].includes(colNumber) ? 'center' : [7, 8].includes(colNumber) ? 'right' : 'left';
+        const align = [1, 3, 7].includes(colNumber) ? 'center' : [8, 9].includes(colNumber) ? 'right' : 'left';
         styleDataCell(cell, align);
-        if ([7, 8].includes(colNumber)) {
+        if ([8, 9].includes(colNumber)) {
           cell.numFmt = '#,##0';
         }
       });
