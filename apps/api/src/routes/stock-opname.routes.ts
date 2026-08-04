@@ -36,6 +36,17 @@ export async function stockOpnameRoutes(app: FastifyInstance) {
     return reply.status(201).send({ success: true, data: { id, name: body.name.trim() } });
   });
 
+  app.put('/api/stock-opname/categories/:id', { preHandler: [requireRole('developer', 'admin')] }, async (req, reply) => {
+    const { id } = req.params as { id: string };
+    const body = req.body as { name: string };
+    if (!body.name || !body.name.trim()) {
+      return reply.status(400).send({ success: false, error: 'Nama kategori wajib diisi' });
+    }
+    await db.update(stockOpnameCategories).set({ name: body.name.trim() }).where(eq(stockOpnameCategories.id, id));
+    await createAuditLog(req, 'stock_opname_category.updated', `Category ${id} updated to "${body.name}"`);
+    return reply.send({ success: true, message: 'Kategori diperbarui' });
+  });
+
   app.delete('/api/stock-opname/categories/:id', { preHandler: [requireRole('developer', 'admin')] }, async (req, reply) => {
     const { id } = req.params as { id: string };
     await db.delete(stockOpnameCategories).where(eq(stockOpnameCategories.id, id));
@@ -446,16 +457,21 @@ export async function stockOpnameRoutes(app: FastifyInstance) {
           if (qty !== undefined) row.getCell(barangMasukStartCol + i).value = qty;
         });
 
-        // Dynamic Excel Formulas
+        const totalStokVal = (item.stockStart || 0) + sumEntries(item.stockInEntries as StockInEntry[]);
+        const stokRealVal = item.stockReal || 0;
+        const terpakaiVal = totalStokVal - stokRealVal;
+        const selisihVal = stokRealVal - totalStokVal;
+
+        // Dynamic Excel Formulas (with result for Excel Protected View compatibility)
         if (dateColCount > 0) {
-          row.getCell(totalStokCol).value = { formula: `D${currentRowNum}+SUM(${startMasukL}${currentRowNum}:${endMasukL}${currentRowNum})` };
+          row.getCell(totalStokCol).value = { formula: `D${currentRowNum}+SUM(${startMasukL}${currentRowNum}:${endMasukL}${currentRowNum})`, result: totalStokVal };
         } else {
-          row.getCell(totalStokCol).value = { formula: `D${currentRowNum}` };
+          row.getCell(totalStokCol).value = { formula: `D${currentRowNum}`, result: totalStokVal };
         }
 
-        row.getCell(stokFisikCol).value = item.stockReal || 0;
-        row.getCell(terpakaiCol).value = { formula: `${totColL}${currentRowNum}-${stokFisikColL}${currentRowNum}` };
-        row.getCell(selisihCol).value = { formula: `${stokFisikColL}${currentRowNum}-${totColL}${currentRowNum}` };
+        row.getCell(stokFisikCol).value = stokRealVal;
+        row.getCell(terpakaiCol).value = { formula: `${totColL}${currentRowNum}-${stokFisikColL}${currentRowNum}`, result: terpakaiVal };
+        row.getCell(selisihCol).value = { formula: `${stokFisikColL}${currentRowNum}-${totColL}${currentRowNum}`, result: selisihVal };
         row.getCell(keteranganCol).value = item.notes || (item.waste ? `Rusak: ${item.waste}` : '-');
 
         for (let c = 1; c <= totalCols; c++) {

@@ -354,10 +354,10 @@ export default function AdminStockOpname() {
                           <td>
                             <div className="flex flex-wrap items-center gap-1">
                               {(item.stockInEntries || []).map((entry) => (
-                                <span key={entry.date} className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded bg-[var(--color-bg-hover,#1e293b)]">
-                                  {new Date(entry.date).getDate()}/{new Date(entry.date).getMonth() + 1}: {entry.qty}
-                                  <button onClick={() => removeStockInEntry(idx, entry.date)} className="opacity-60 hover:opacity-100">
-                                    <X size={10} />
+                                <span key={entry.date} className="inline-flex items-center gap-1 text-xs font-semibold px-2 py-0.5 rounded-md bg-cyan-950/80 text-cyan-300 border border-cyan-500/40 shadow-sm">
+                                  {new Date(entry.date).getDate()}/{new Date(entry.date).getMonth() + 1}: <span className="font-bold text-white">{entry.qty}</span>
+                                  <button onClick={() => removeStockInEntry(idx, entry.date)} className="text-cyan-400 hover:text-red-400 ml-0.5 transition-colors">
+                                    <X size={12} />
                                   </button>
                                 </span>
                               ))}

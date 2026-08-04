@@ -5,7 +5,7 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '../lib/api';
-import { Plus, Pencil, Trash2, X, Loader2, Type, Sliders, Layers, Settings2, Check } from 'lucide-react';
+import { Plus, Pencil, Trash2, X, Loader2, Type, Sliders, Layers, Settings2, Check, ClipboardList } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { getLocalCategories, cacheCategories } from '../lib/offline-db';
 
@@ -36,7 +36,7 @@ interface CategoryOptionGroup {
 
 export default function AdminCategories() {
   const qc = useQueryClient();
-  const [activeMainTab, setActiveMainTab] = useState<'categories' | 'optionGroups'>('categories');
+  const [activeMainTab, setActiveMainTab] = useState<'categories' | 'optionGroups' | 'stockOpname'>('categories');
 
   // Category Form State
   const [showCategoryForm, setShowCategoryForm] = useState(false);
@@ -56,6 +56,11 @@ export default function AdminCategories() {
     maxSelect: 1,
     options: [{ name: '', price: 0 }],
   });
+
+  // Stock Opname Category Form State
+  const [showStockOpnameCatForm, setShowStockOpnameCatForm] = useState(false);
+  const [editingStockOpnameCat, setEditingStockOpnameCat] = useState<{ id: string; name: string } | null>(null);
+  const [stockOpnameCatName, setStockOpnameCatName] = useState('');
 
   // Queries
   const { data: catRes, isLoading: isCatLoading } = useQuery({
@@ -77,8 +82,72 @@ export default function AdminCategories() {
     queryFn: () => api.get<{ data: CategoryOptionGroup[] }>('/category-option-groups'),
   });
 
+  const { data: stockOpnameCatsRes, isLoading: isStockOpnameCatsLoading } = useQuery({
+    queryKey: ['stock-opname-categories'],
+    queryFn: () => api.get<{ data: { id: string; name: string }[] }>('/stock-opname/categories'),
+  });
+
   const categories = catRes?.data || [];
   const optionGroups = optionGroupsRes?.data || [];
+  const stockOpnameCats = stockOpnameCatsRes?.data || [];
+
+  // Stock Opname Category Mutations
+  const createStockOpnameCatMutation = useMutation({
+    mutationFn: (name: string) => api.post('/stock-opname/categories', { name }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['stock-opname-categories'] });
+      toast.success('Kategori stok opname ditambahkan');
+      closeStockOpnameCatForm();
+    },
+    onError: (e: any) => toast.error(e.message),
+  });
+
+  const updateStockOpnameCatMutation = useMutation({
+    mutationFn: ({ id, name }: { id: string; name: string }) => api.put(`/stock-opname/categories/${id}`, { name }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['stock-opname-categories'] });
+      toast.success('Kategori stok opname diperbarui');
+      closeStockOpnameCatForm();
+    },
+    onError: (e: any) => toast.error(e.message),
+  });
+
+  const deleteStockOpnameCatMutation = useMutation({
+    mutationFn: (id: string) => api.delete(`/stock-opname/categories/${id}`),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['stock-opname-categories'] });
+      toast.success('Kategori stok opname dihapus');
+    },
+    onError: (e: any) => toast.error(e.message),
+  });
+
+  const openCreateStockOpnameCat = () => {
+    setEditingStockOpnameCat(null);
+    setStockOpnameCatName('');
+    setShowStockOpnameCatForm(true);
+  };
+
+  const openEditStockOpnameCat = (c: { id: string; name: string }) => {
+    setEditingStockOpnameCat(c);
+    setStockOpnameCatName(c.name);
+    setShowStockOpnameCatForm(true);
+  };
+
+  const closeStockOpnameCatForm = () => {
+    setShowStockOpnameCatForm(false);
+    setEditingStockOpnameCat(null);
+    setStockOpnameCatName('');
+  };
+
+  const handleStockOpnameCatSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!stockOpnameCatName.trim()) return;
+    if (editingStockOpnameCat) {
+      updateStockOpnameCatMutation.mutate({ id: editingStockOpnameCat.id, name: stockOpnameCatName.trim() });
+    } else {
+      createStockOpnameCatMutation.mutate(stockOpnameCatName.trim());
+    }
+  };
 
   // Category Mutations
   const createCategoryMutation = useMutation({
@@ -254,43 +323,58 @@ export default function AdminCategories() {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold">Kategori & Varian</h1>
-          <p className="text-sm text-[var(--color-text-muted)]">Kelola kategori produk dan grup opsi/varian per kategori</p>
+          <p className="text-sm text-[var(--color-text-muted)]">Kelola kategori produk menu, grup varian, dan kategori bahan stok opname</p>
         </div>
         <div className="flex gap-2">
           {activeMainTab === 'categories' ? (
             <button onClick={openCreateCategory} className="btn btn-primary">
               <Plus size={18} /> Tambah Kategori
             </button>
-          ) : (
+          ) : activeMainTab === 'optionGroups' ? (
             <button onClick={openCreateGroup} className="btn btn-primary">
               <Plus size={18} /> Tambah Grup Opsi
+            </button>
+          ) : (
+            <button onClick={openCreateStockOpnameCat} className="btn btn-primary">
+              <Plus size={18} /> Tambah Kategori Stok Opname
             </button>
           )}
         </div>
       </div>
 
       {/* Main Tabs */}
-      <div className="flex border-b border-[var(--color-border)] gap-6">
+      <div className="flex border-b border-[var(--color-border)] gap-6 overflow-x-auto">
         <button
           onClick={() => setActiveMainTab('categories')}
-          className={`pb-3 text-sm font-semibold flex items-center gap-2 border-b-2 transition-all ${
+          className={`pb-3 text-sm font-semibold flex items-center gap-2 border-b-2 transition-all whitespace-nowrap ${
             activeMainTab === 'categories'
               ? 'border-[var(--color-primary-500)] text-[var(--color-primary-400)]'
               : 'border-transparent text-[var(--color-text-muted)] hover:text-white'
           }`}
         >
-          <Layers size={16} /> Daftar Kategori ({categories.length})
+          <Layers size={16} /> Kategori Menu ({categories.length})
         </button>
 
         <button
           onClick={() => setActiveMainTab('optionGroups')}
-          className={`pb-3 text-sm font-semibold flex items-center gap-2 border-b-2 transition-all ${
+          className={`pb-3 text-sm font-semibold flex items-center gap-2 border-b-2 transition-all whitespace-nowrap ${
             activeMainTab === 'optionGroups'
               ? 'border-[var(--color-primary-500)] text-[var(--color-primary-400)]'
               : 'border-transparent text-[var(--color-text-muted)] hover:text-white'
           }`}
         >
           <Settings2 size={16} /> Grup Opsi / Varian ({optionGroups.length})
+        </button>
+
+        <button
+          onClick={() => setActiveMainTab('stockOpname')}
+          className={`pb-3 text-sm font-semibold flex items-center gap-2 border-b-2 transition-all whitespace-nowrap ${
+            activeMainTab === 'stockOpname'
+              ? 'border-[var(--color-primary-500)] text-[var(--color-primary-400)]'
+              : 'border-transparent text-[var(--color-text-muted)] hover:text-white'
+          }`}
+        >
+          <ClipboardList size={16} /> Kategori Stok Opname ({stockOpnameCats.length})
         </button>
       </div>
 
@@ -386,6 +470,47 @@ export default function AdminCategories() {
                       <span className="font-mono text-emerald-400">+Rp {Number(opt.price).toLocaleString('id-ID')}</span>
                     </div>
                   ))}
+                </div>
+              </div>
+            ))
+          )}
+        </div>
+      )}
+      {activeMainTab === 'stockOpname' && (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          {isStockOpnameCatsLoading ? (
+            <div className="col-span-full flex justify-center py-8"><div className="spinner" /></div>
+          ) : stockOpnameCats.length === 0 ? (
+            <div className="col-span-full glass-card p-8 text-center">
+              <ClipboardList size={40} className="mx-auto mb-2 opacity-30 text-cyan-400" />
+              <p className="text-[var(--color-text-dim)]">Belum ada kategori bahan stok opname</p>
+              <button onClick={openCreateStockOpnameCat} className="btn btn-primary btn-sm mt-4">
+                <Plus size={14} /> Tambah Kategori Stok Opname
+              </button>
+            </div>
+          ) : (
+            stockOpnameCats.map((c) => (
+              <div key={c.id} className="glass-card p-5 flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-cyan-500/20 text-cyan-400 border border-cyan-500/40 flex items-center justify-center font-bold text-sm shrink-0">
+                    <ClipboardList size={20} />
+                  </div>
+                  <div className="min-w-0">
+                    <h3 className="font-semibold text-base text-white truncate">{c.name}</h3>
+                    <p className="text-xs text-[var(--color-text-muted)]">Kategori Bahan Stok Opname</p>
+                  </div>
+                </div>
+                <div className="flex gap-1 shrink-0">
+                  <button onClick={() => openEditStockOpnameCat(c)} className="btn btn-ghost btn-icon btn-sm" title="Edit Nama Kategori">
+                    <Pencil size={14} />
+                  </button>
+                  <button
+                    onClick={() => { if (confirm(`Hapus kategori stok opname "${c.name}"?`)) deleteStockOpnameCatMutation.mutate(c.id); }}
+                    className="btn btn-ghost btn-icon btn-sm text-red-400"
+                    title="Hapus Kategori"
+                  >
+                    <Trash2 size={14} />
+                  </button>
                 </div>
               </div>
             ))
@@ -637,6 +762,49 @@ export default function AdminCategories() {
                     <Loader2 size={16} className="animate-spin" />
                   ) : (
                     'Simpan Grup Opsi'
+                  )}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* STOCK OPNAME CATEGORY MODAL */}
+      {showStockOpnameCatForm && (
+        <div className="modal-overlay" onClick={closeStockOpnameCatForm}>
+          <div className="modal-content max-w-md w-full" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-4 pb-2 border-b border-[var(--color-border)]">
+              <h3 className="text-lg font-bold">
+                {editingStockOpnameCat ? 'Edit Kategori Stok Opname' : 'Tambah Kategori Stok Opname'}
+              </h3>
+              <button onClick={closeStockOpnameCatForm} className="btn btn-ghost btn-icon"><X size={20} /></button>
+            </div>
+            <form onSubmit={handleStockOpnameCatSubmit} className="space-y-4">
+              <div>
+                <label className="text-sm font-medium text-[var(--color-text-muted)] mb-1 block">Nama Kategori Bahan</label>
+                <input
+                  className="input"
+                  placeholder="misal: Kelompok Daging & Ayam, Bumbu & Rempah..."
+                  value={stockOpnameCatName}
+                  onChange={(e) => setStockOpnameCatName(e.target.value)}
+                  required
+                  autoFocus
+                />
+              </div>
+              <div className="flex gap-2 pt-2 border-t border-[var(--color-border)]">
+                <button type="button" onClick={closeStockOpnameCatForm} className="btn btn-secondary flex-1">
+                  Batal
+                </button>
+                <button
+                  type="submit"
+                  disabled={createStockOpnameCatMutation.isPending || updateStockOpnameCatMutation.isPending}
+                  className="btn btn-primary flex-1"
+                >
+                  {(createStockOpnameCatMutation.isPending || updateStockOpnameCatMutation.isPending) ? (
+                    <Loader2 size={16} className="animate-spin" />
+                  ) : (
+                    'Simpan'
                   )}
                 </button>
               </div>
