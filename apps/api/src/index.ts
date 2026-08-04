@@ -101,6 +101,12 @@ async function start() {
         "price" numeric(12, 2) DEFAULT '0' NOT NULL,
         "created_at" timestamp DEFAULT now() NOT NULL
       );
+      CREATE TABLE IF NOT EXISTS "stock_opname_categories" (
+        "id" text PRIMARY KEY NOT NULL,
+        "name" text NOT NULL,
+        "sort_order" integer DEFAULT 0 NOT NULL,
+        "created_at" timestamp DEFAULT now() NOT NULL
+      );
       CREATE TABLE IF NOT EXISTS "stock_opname_sessions" (
         "id" text PRIMARY KEY NOT NULL,
         "name" text NOT NULL,
@@ -113,16 +119,33 @@ async function start() {
         "id" text PRIMARY KEY NOT NULL,
         "session_id" text NOT NULL REFERENCES "stock_opname_sessions"("id") ON DELETE CASCADE,
         "product_id" text REFERENCES "products"("id") ON DELETE SET NULL,
+        "category_id" text,
         "product_name" text NOT NULL,
         "unit" text DEFAULT 'Pcs' NOT NULL,
         "stock_start" integer DEFAULT 0 NOT NULL,
         "stock_in" integer DEFAULT 0 NOT NULL,
+        "stock_in_entries" jsonb DEFAULT '[]'::jsonb NOT NULL,
         "stock_real" integer DEFAULT 0 NOT NULL,
         "usage" integer DEFAULT 0 NOT NULL,
         "waste" integer DEFAULT 0 NOT NULL,
         "notes" text
       );
+      ALTER TABLE "stock_opname_items" ADD COLUMN IF NOT EXISTS "category_id" text;
+      ALTER TABLE "stock_opname_items" ADD COLUMN IF NOT EXISTS "stock_in_entries" jsonb DEFAULT '[]'::jsonb NOT NULL;
     `);
+
+    // Seed default stock opname categories if empty
+    const catCheck = await db.select().from(schema.stockOpnameCategories).limit(1);
+    if (catCheck.length === 0) {
+      await db.insert(schema.stockOpnameCategories).values([
+        { id: 'cat_daging', name: 'Kelompok Daging & Ayam', sortOrder: 1 },
+        { id: 'cat_bahan_utama', name: 'Bahan Produksi Utama', sortOrder: 2 },
+        { id: 'cat_bumbu', name: 'Bumbu & Rempah', sortOrder: 3 },
+        { id: 'cat_sayuran', name: 'Sayuran & Bahan Segar', sortOrder: 4 },
+        { id: 'cat_packaging', name: 'Packaging & Kemasan', sortOrder: 5 },
+        { id: 'cat_minuman', name: 'Minuman & Sirup', sortOrder: 6 },
+      ]);
+    }
   } catch (colErr) {
     console.warn('Auto DDL warning:', colErr);
   }
