@@ -6,6 +6,7 @@ const API_BASE = '/api';
 const BASE_URL = import.meta.env.PROD ? 'http://72.61.214.92:8080' : '';
 
 import { Capacitor } from '@capacitor/core';
+import toast from 'react-hot-toast';
 
 // --- Native Platform Detection & Token Management ---
 // Cookies don't reliably work cross-origin in Tauri or Android/iOS WebView (Capacitor),
@@ -82,6 +83,22 @@ async function request<T>(url: string, options: FetchOptions = {}): Promise<T> {
   return res.json();
 }
 
+function blobToBase64(blob: Blob): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      if (typeof reader.result === 'string') {
+        const base64 = reader.result.split(',')[1] || '';
+        resolve(base64);
+      } else {
+        reject(new Error('Gagal mengonversi file ke base64'));
+      }
+    };
+    reader.onerror = () => reject(reader.error || new Error('FileReader error'));
+    reader.readAsDataURL(blob);
+  });
+}
+
 // --- API Client ---
 export const api = {
   get: <T>(url: string, params?: Record<string, string>) =>
@@ -124,48 +141,40 @@ export const api = {
     // Android Capacitor Native Download
     if (IS_CAPACITOR) {
       try {
+        const base64Data = await blobToBase64(blob);
         const { Filesystem, Directory } = await import('@capacitor/filesystem');
-        const reader = new FileReader();
-        reader.readAsDataURL(blob);
-        await new Promise<void>((resolve, reject) => {
-          reader.onloadend = async () => {
-            try {
-              const base64Data = (reader.result as string).split(',')[1];
 
-              // Request permissions if needed
-              try { await Filesystem.requestPermissions(); } catch (_) {}
+        // Request permissions
+        try { await Filesystem.requestPermissions(); } catch (_) {}
 
-              const writeRes = await Filesystem.writeFile({
-                path: defaultFilename,
-                data: base64Data,
-                directory: Directory.Documents,
-                recursive: true,
-              });
-
-              // Try opening share sheet so user can open / save file anywhere easily
-              try {
-                const { Share } = await import('@capacitor/share');
-                const fileUri = writeRes.uri || (await Filesystem.getUri({ directory: Directory.Documents, path: defaultFilename })).uri;
-                await Share.share({
-                  title: defaultFilename,
-                  text: 'File Excel Laporan POS Yoga',
-                  url: fileUri,
-                  dialogTitle: 'Buka atau Simpan File Excel',
-                });
-              } catch (_) {
-                // If share fails, fallback is already written to Documents
-              }
-
-              resolve();
-            } catch (e) {
-              reject(e);
-            }
-          };
-          reader.onerror = reject;
+        // Write file to Documents directory
+        const writeRes = await Filesystem.writeFile({
+          path: defaultFilename,
+          data: base64Data,
+          directory: Directory.Documents,
+          recursive: true,
         });
+
+        toast.success(`File ${defaultFilename} berhasil diunduh!`);
+
+        // Try opening native share sheet so user can view/open/save anywhere
+        try {
+          const { Share } = await import('@capacitor/share');
+          const fileUri = writeRes.uri || (await Filesystem.getUri({ directory: Directory.Documents, path: defaultFilename })).uri;
+          await Share.share({
+            title: defaultFilename,
+            text: 'File Excel Laporan POS Yoga',
+            url: fileUri,
+            dialogTitle: 'Buka atau Simpan File Excel',
+          });
+        } catch (shareErr) {
+          console.warn('Capacitor share skipped/failed:', shareErr);
+        }
+
         return;
-      } catch (capErr) {
-        console.warn('Capacitor filesystem write failed:', capErr);
+      } catch (capErr: any) {
+        console.error('Capacitor filesystem write failed:', capErr);
+        toast.error('Gagal menyimpan file: ' + (capErr.message || 'Error lokal'));
       }
     }
 
