@@ -59,7 +59,8 @@ const DATE_FILTERS = [
   { value: 'this_week', label: 'Minggu Ini' },
   { value: 'last_week', label: 'Minggu Lalu' },
   { value: 'this_month', label: 'Bulan Ini' },
-  { value: 'last_month', label: 'Bulan Lalu' }
+  { value: 'last_month', label: 'Bulan Lalu' },
+  { value: 'custom', label: 'Custom (Pilih Tanggal)' },
 ];
 
 const STATUS_FILTERS = [
@@ -110,7 +111,7 @@ function Dropdown({ label, icon: Icon, options, value, onChange }: any) {
       </button>
       
       {isOpen && (
-        <div className="absolute top-full mt-1 left-0 z-50 w-48 bg-[var(--color-surface)] border border-[var(--color-border)] rounded-md shadow-lg overflow-hidden py-1">
+        <div className="absolute top-full mt-1 left-0 z-50 w-56 bg-[var(--color-surface)] border border-[var(--color-border)] rounded-md shadow-lg overflow-hidden py-1">
           {options.map((opt: any) => (
             <button
               key={opt.value}
@@ -132,6 +133,8 @@ function Dropdown({ label, icon: Icon, options, value, onChange }: any) {
 export default function AdminTransactions() {
   // State
   const [dateFilter, setDateFilter] = useState('all');
+  const [fromDate, setFromDate] = useState(() => new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().slice(0, 10));
+  const [toDate, setToDate] = useState(() => new Date().toISOString().slice(0, 10));
   const [status, setStatus] = useState('all');
   const [orderType, setOrderType] = useState('all');
   const [paymentMethod, setPaymentMethod] = useState('all');
@@ -158,10 +161,16 @@ export default function AdminTransactions() {
   });
 
   const { data: txData, isLoading, isFetching } = useQuery({
-    queryKey: ['transactions', { dateFilter, status, orderType, paymentMethod, invoiceNo, userId: userIdFilter, page, limit }],
+    queryKey: ['transactions', { dateFilter, fromDate, toDate, status, orderType, paymentMethod, invoiceNo, userId: userIdFilter, page, limit }],
     queryFn: async () => {
       const params: any = { page, limit };
-      if (dateFilter !== 'all') params.dateFilter = dateFilter;
+      if (dateFilter !== 'all') {
+        params.dateFilter = dateFilter;
+        if (dateFilter === 'custom') {
+          if (fromDate) params.from = fromDate;
+          if (toDate) params.to = toDate;
+        }
+      }
       if (status !== 'all') params.status = status;
       if (orderType !== 'all') params.orderType = orderType;
       if (paymentMethod !== 'all') params.paymentMethod = paymentMethod;
@@ -193,7 +202,15 @@ export default function AdminTransactions() {
   // Export
   const handleExport = async () => {
     try {
-      await api.downloadFile('/export/transactions', 'transaksi-export.xlsx');
+      const queryParams: string[] = [];
+      if (dateFilter === 'custom') {
+        if (fromDate) queryParams.push(`from=${fromDate}`);
+        if (toDate) queryParams.push(`to=${toDate}`);
+      } else if (dateFilter !== 'all') {
+        queryParams.push(`dateFilter=${dateFilter}`);
+      }
+      const url = queryParams.length > 0 ? `/export/transactions?${queryParams.join('&')}` : '/export/transactions';
+      await api.downloadFile(url, 'transaksi-export.xlsx');
       toast.success('Berhasil mengunduh laporan transaksi');
     } catch (error) {
       toast.error('Gagal mengunduh laporan');
@@ -259,6 +276,24 @@ export default function AdminTransactions() {
       <div className="card p-4">
         <div className="flex flex-wrap gap-3 items-center mb-4">
           <Dropdown label="Tanggal" icon={Calendar} options={DATE_FILTERS} value={dateFilter} onChange={(v: string) => { setDateFilter(v); setPage(1); }} />
+          {dateFilter === 'custom' && (
+            <div className="flex items-center gap-2 bg-[var(--color-surface)] border border-[var(--color-border)] px-3 py-1.5 rounded-full text-sm">
+              <span className="text-[var(--color-text-secondary)] text-xs font-medium">Dari:</span>
+              <input
+                type="date"
+                value={fromDate}
+                onChange={(e) => { setFromDate(e.target.value); setPage(1); }}
+                className="bg-transparent border-none text-xs focus:outline-none text-[var(--color-text)] font-mono"
+              />
+              <span className="text-[var(--color-text-secondary)] text-xs font-medium">s/d</span>
+              <input
+                type="date"
+                value={toDate}
+                onChange={(e) => { setToDate(e.target.value); setPage(1); }}
+                className="bg-transparent border-none text-xs focus:outline-none text-[var(--color-text)] font-mono"
+              />
+            </div>
+          )}
           <Dropdown label="Status" icon={Filter} options={STATUS_FILTERS} value={status} onChange={(v: string) => { setStatus(v); setPage(1); }} />
           <Dropdown label="Tipe" icon={RefreshCw} options={ORDER_TYPE_FILTERS} value={orderType} onChange={(v: string) => { setOrderType(v); setPage(1); }} />
           <Dropdown label="Pembayaran" icon={CreditCard} options={PAYMENT_METHOD_FILTERS} value={paymentMethod} onChange={(v: string) => { setPaymentMethod(v); setPage(1); }} />

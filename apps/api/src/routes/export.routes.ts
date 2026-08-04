@@ -44,8 +44,10 @@ export async function exportRoutes(app: FastifyInstance) {
   app.get('/api/export/transactions', { preHandler: [requireRole('developer', 'admin')] }, async (req, reply) => {
     const { from, to } = req.query as { from?: string; to?: string };
 
-    const startDate = from ? new Date(`${from}T00:00:00`) : new Date(new Date().setHours(0, 0, 0, 0));
-    const endDate = to ? new Date(`${to}T23:59:59`) : new Date(new Date().setHours(23, 59, 59, 999));
+    const dateConditions: any[] = [];
+    if (from) dateConditions.push(gte(transactions.createdAt, new Date(`${from}T00:00:00`)));
+    if (to) dateConditions.push(lte(transactions.createdAt, new Date(`${to}T23:59:59`)));
+    const whereClause = dateConditions.length > 0 ? and(...dateConditions) : undefined;
 
     // Fetch transactions
     const txList = await db.select({
@@ -63,7 +65,7 @@ export async function exportRoutes(app: FastifyInstance) {
     })
       .from(transactions)
       .leftJoin(user, eq(transactions.userId, user.id))
-      .where(and(gte(transactions.createdAt, startDate), lte(transactions.createdAt, endDate)))
+      .where(whereClause)
       .orderBy(desc(transactions.createdAt));
 
     // Fetch transaction items with details
@@ -83,10 +85,12 @@ export async function exportRoutes(app: FastifyInstance) {
         price: transactionItems.price,
         subtotal: transactionItems.subtotal,
         note: transactionItems.note,
+        productCost: products.cost,
       })
         .from(transactionItems)
         .leftJoin(transactions, eq(transactionItems.transactionId, transactions.id))
-        .where(and(gte(transactions.createdAt, startDate), lte(transactions.createdAt, endDate)))
+        .leftJoin(products, eq(transactionItems.productId, products.id))
+        .where(whereClause)
         .orderBy(desc(transactions.createdAt));
 
       itemsList.forEach((item) => {
@@ -94,7 +98,7 @@ export async function exportRoutes(app: FastifyInstance) {
         if (!itemsByTx[item.transactionId]) itemsByTx[item.transactionId] = [];
         itemsByTx[item.transactionId].push(item);
 
-        // Aggregate product sales summary (for Sheet 3)
+        // Aggregate product sales summary (for Sheet 2)
         const key = `${item.productName}__${item.variantName || 'Biasa'}`;
         if (!productSalesMap[key]) {
           productSalesMap[key] = {
@@ -262,34 +266,81 @@ export async function exportRoutes(app: FastifyInstance) {
       { header: 'Varian', key: 'variantName', width: 24 },
       { header: 'Jumlah Terjual', key: 'qty', width: 16 },
       { header: 'Harga Satuan (Rp)', key: 'price', width: 18 },
-      { header: 'Subtotal (Rp)', key: 'subtotal', width: 18 },
+      { header: 'Subtotal Jual (Rp)', key: 'subtotal', width: 18 },
+      { header: 'Harga Modal (Rp)', key: 'cost', width: 18 },
+      { header: 'Total Modal (Rp)', key: 'totalCost', width: 18 },
+      { header: 'Margin / Keuntungan (Rp)', key: 'margin', width: 24 },
       { header: 'Catatan Item', key: 'note', width: 24 },
     ];
 
     s3.getRow(1).eachCell((cell) => styleHeaderCell(cell));
 
+    let s3TotalQtySum = 0;
+    let s3TotalSubtotalSum = 0;
+    let s3TotalCostSum = 0;
+    let s3TotalMarginSum = 0;
+
     itemsList.forEach((it, i) => {
+      const rowNum = i + 2; // Row 1 is header
       const d = it.createdAt ? new Date(it.createdAt) : new Date();
+      const qtyVal = Number(it.qty) || 0;
+      const priceVal = Number(it.price) || 0;
+      const costVal = Number(it.productCost) || 0;
+      const subtotalVal = Number(it.subtotal) || (qtyVal * priceVal);
+      const totalCostVal = qtyVal * costVal;
+      const marginVal = subtotalVal - totalCostVal;
+
+      s3TotalQtySum += qtyVal;
+      s3TotalSubtotalSum += subtotalVal;
+      s3TotalCostSum += totalCostVal;
+      s3TotalMarginSum += marginVal;
+
       const row = s3.addRow({
         no: i + 1,
         invoiceNo: it.invoiceNo || '-',
         date: d.toLocaleDateString('id-ID'),
         productName: it.productName,
         variantName: it.variantName || 'Biasa / Regular',
-        qty: Number(it.qty) || 0,
-        price: Number(it.price) || 0,
-        subtotal: Number(it.subtotal) || 0,
+        qty: qtyVal,
+        price: priceVal,
+        subtotal: { formula: `F${rowNum}*G${rowNum}`, result: subtotalVal },
+        cost: costVal,
+        totalCost: { formula: `F${rowNum}*I${rowNum}`, result: totalCostVal },
+        margin: { formula: `H${rowNum}-J${rowNum}`, result: marginVal },
         note: it.note || '-',
       });
 
       row.eachCell((cell, colNumber) => {
-        const align = [1, 3].includes(colNumber) ? 'center' : [6, 7, 8].includes(colNumber) ? 'right' : 'left';
+        const align = [1, 3].includes(colNumber) ? 'center' : [6, 7, 8, 9, 10, 11].includes(colNumber) ? 'right' : 'left';
         styleDataCell(cell, align);
-        if ([6, 7, 8].includes(colNumber)) {
+        if ([6, 7, 8, 9, 10, 11].includes(colNumber)) {
           cell.numFmt = '#,##0';
         }
       });
     });
+
+    if (itemsList.length > 0) {
+      const summaryRow = s3.addRow({
+        no: '',
+        invoiceNo: 'TOTAL',
+        date: '',
+        productName: '',
+        variantName: '',
+        qty: s3TotalQtySum,
+        price: '',
+        subtotal: s3TotalSubtotalSum,
+        cost: '',
+        totalCost: s3TotalCostSum,
+        margin: s3TotalMarginSum,
+        note: '',
+      });
+      summaryRow.eachCell((cell, colNumber) => {
+        styleHeaderCell(cell);
+        if ([6, 8, 10, 11].includes(colNumber)) {
+          cell.numFmt = '#,##0';
+        }
+      });
+    }
 
     const buffer = await workbook.xlsx.writeBuffer();
     const dateTag = from && to ? `${from}_to_${to}` : new Date().toISOString().slice(0, 10);
