@@ -270,7 +270,13 @@ async function start() {
     },
   });
 
-  // Register Static to serve uploaded files at /api/uploads/*
+  // Register Static to serve uploaded files at both /uploads/* and /api/uploads/*
+  await app.register(fastifyStatic, {
+    root: uploadsDir,
+    prefix: '/uploads/',
+    decorateReply: false,
+  });
+
   await app.register(fastifyStatic, {
     root: uploadsDir,
     prefix: '/api/uploads/',

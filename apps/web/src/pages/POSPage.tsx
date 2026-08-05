@@ -95,6 +95,7 @@ export default function POSPage() {
   const grandTotal = getTotal();
 
   const [optionModalProduct, setOptionModalProduct] = useState<ProductData | null>(null);
+  const [selectedVariant, setSelectedVariant] = useState<{ id?: string; name: string; additionalPrice: number } | null>(null);
   const [selectedOptions, setSelectedOptions] = useState<Record<string, { id?: string; name: string; price: number }[]>>({});
 
   const { data: optionGroupsRes } = useQuery({
@@ -153,10 +154,7 @@ export default function POSPage() {
     if (selectedCategory && p.categoryId !== selectedCategory) return false;
     if (search) {
       const q = search.toLowerCase();
-      return (
-        p.name.toLowerCase().includes(q) ||
-        p.barcode?.includes(q)
-      );
+      return p.name.toLowerCase().includes(q) || (p.barcode && p.barcode.includes(q));
     }
     return true;
   });
@@ -497,15 +495,16 @@ export default function POSPage() {
     }
 
     const categoryGroups = allOptionGroups.filter(g => g.categoryId === product.categoryId);
-    if (categoryGroups.length > 0) {
+    const hasVariants = Array.isArray(product.variants) && product.variants.length > 0;
+
+    if (categoryGroups.length > 0 || hasVariants) {
       setOptionModalProduct(product);
+      setSelectedVariant(null);
       const init: Record<string, { id?: string; name: string; price: number }[]> = {};
       categoryGroups.forEach(g => {
         init[g.id] = [];
       });
       setSelectedOptions(init);
-    } else if (product.variants && product.variants.length > 0) {
-      setVariantSelectionProduct(product);
     } else {
       addItem({ id: product.id, name: product.name, price: Number(product.price) });
       toast.success(`${product.name} +1`, { duration: 1000, icon: '🛒' });
@@ -1546,6 +1545,66 @@ export default function POSPage() {
             </div>
 
             <div className="space-y-4 max-h-[50vh] overflow-y-auto pr-1">
+              {/* Product-Specific Variants (Varian Rasa / Submenu) */}
+              {Array.isArray(optionModalProduct.variants) && optionModalProduct.variants.length > 0 && (
+                <div className="glass-card p-3 space-y-2 border border-blue-500/30">
+                  <div className="flex items-center justify-between">
+                    <span className="font-bold text-sm text-white">Varian / Rasa Produk</span>
+                    <span className="badge badge-info text-[10px]">Pilih 1</span>
+                  </div>
+                  <div className="space-y-1.5 pt-1">
+                    {/* Normal option */}
+                    <button
+                      type="button"
+                      onClick={() => setSelectedVariant(null)}
+                      className={`w-full flex items-center justify-between p-2.5 rounded-lg border text-left transition-all ${
+                        selectedVariant === null
+                          ? 'border-[var(--color-primary-500)] bg-[var(--color-primary-500)]/15 text-white font-bold'
+                          : 'border-[var(--color-border)] bg-[var(--color-surface)] text-[var(--color-text-muted)] hover:text-white'
+                      }`}
+                    >
+                      <div className="flex items-center gap-2">
+                        <div className={`w-4 h-4 rounded-full flex items-center justify-center border ${selectedVariant === null ? 'border-[var(--color-primary-500)] bg-[var(--color-primary-500)] text-white' : 'border-gray-500'}`}>
+                          {selectedVariant === null && <div className="w-1.5 h-1.5 rounded-full bg-white" />}
+                        </div>
+                        <span className="text-xs font-medium">Biasa / Regular</span>
+                      </div>
+                      <span className="text-xs font-mono text-emerald-400">{formatCurrency(Number(optionModalProduct.price))}</span>
+                    </button>
+
+                    {/* Variant options */}
+                    {optionModalProduct.variants.map((v) => {
+                      const isSelected = selectedVariant?.id === v.id;
+                      const vAddPrice = Number(v.additionalPrice) || 0;
+                      return (
+                        <button
+                          key={v.id}
+                          type="button"
+                          onClick={() => setSelectedVariant({ id: v.id, name: v.name, additionalPrice: vAddPrice })}
+                          className={`w-full flex items-center justify-between p-2.5 rounded-lg border text-left transition-all ${
+                            isSelected
+                              ? 'border-[var(--color-primary-500)] bg-[var(--color-primary-500)]/15 text-white font-bold'
+                              : 'border-[var(--color-border)] bg-[var(--color-surface)] text-[var(--color-text-muted)] hover:text-white'
+                          }`}
+                        >
+                          <div className="flex items-center gap-2">
+                            <div className={`w-4 h-4 rounded-full flex items-center justify-center border ${isSelected ? 'border-[var(--color-primary-500)] bg-[var(--color-primary-500)] text-white' : 'border-gray-500'}`}>
+                              {isSelected && <div className="w-1.5 h-1.5 rounded-full bg-white" />}
+                            </div>
+                            <span className="text-xs font-medium">{v.name}</span>
+                          </div>
+                          <span className="text-xs font-mono text-emerald-400">
+                            {formatCurrency(Number(optionModalProduct.price) + vAddPrice)}
+                            {vAddPrice > 0 && <span className="text-[10px] text-[var(--color-text-dim)] ml-1">(+{formatCurrency(vAddPrice)})</span>}
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {/* Category Option Groups */}
               {allOptionGroups
                 .filter(g => g.categoryId === optionModalProduct.categoryId)
                 .map(group => {
@@ -1621,8 +1680,9 @@ export default function POSPage() {
               {(() => {
                 const groupsForProduct = allOptionGroups.filter(g => g.categoryId === optionModalProduct.categoryId);
                 const allSelected = Object.values(selectedOptions).flat();
-                const addPrice = allSelected.reduce((sum, item) => sum + item.price, 0);
-                const totalPrice = Number(optionModalProduct.price) + addPrice;
+                const variantAddPrice = selectedVariant ? selectedVariant.additionalPrice : 0;
+                const optionsAddPrice = allSelected.reduce((sum, item) => sum + item.price, 0);
+                const totalPrice = Number(optionModalProduct.price) + variantAddPrice + optionsAddPrice;
 
                 return (
                   <>
@@ -1634,7 +1694,7 @@ export default function POSPage() {
                     <button
                       type="button"
                       onClick={() => {
-                        // Validation
+                        // Validation for Category Option Groups
                         for (const group of groupsForProduct) {
                           const sel = selectedOptions[group.id] || [];
                           if (group.isRequired && sel.length === 0) {
@@ -1647,8 +1707,13 @@ export default function POSPage() {
                           }
                         }
 
-                        // Build variant string & add item
-                        const variantNames = allSelected.map(s => `${s.name} (+Rp ${s.price.toLocaleString('id-ID')})`).join(', ');
+                        // Combine variant & option names
+                        const variantParts = [
+                          selectedVariant?.name,
+                          ...allSelected.map(s => `${s.name} (+Rp ${s.price.toLocaleString('id-ID')})`)
+                        ].filter(Boolean);
+
+                        const combinedVariantName = variantParts.join(', ');
 
                         addItem(
                           {
@@ -1656,10 +1721,10 @@ export default function POSPage() {
                             name: optionModalProduct.name,
                             price: Number(optionModalProduct.price)
                           },
-                          allSelected.length > 0 ? {
-                            id: 'opt_' + Math.random().toString(36).substring(2, 9),
-                            name: variantNames || 'Kustom Opsi',
-                            additionalPrice: addPrice
+                          variantParts.length > 0 ? {
+                            id: selectedVariant?.id || ('opt_' + Math.random().toString(36).substring(2, 9)),
+                            name: combinedVariantName,
+                            additionalPrice: variantAddPrice + optionsAddPrice
                           } : undefined
                         );
 

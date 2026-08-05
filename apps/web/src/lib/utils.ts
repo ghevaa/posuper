@@ -45,7 +45,9 @@ export function getProductImageUrl(imagePath: string | null | undefined): string
   if (imagePath.startsWith('http://') || imagePath.startsWith('https://') || imagePath.startsWith('data:')) {
     return imagePath;
   }
-  const IS_TAURI = !!(window as any).__TAURI_INTERNALS__;
-  const BASE_URL = IS_TAURI ? 'http://72.61.214.92:8080' : '';
-  return `${BASE_URL}${imagePath}`;
+  const cleanPath = imagePath.startsWith('/') ? imagePath : `/${imagePath}`;
+  const IS_TAURI = typeof window !== 'undefined' && !!(window as any).__TAURI_INTERNALS__;
+  const IS_CAPACITOR = typeof window !== 'undefined' && !!(window as any).Capacitor;
+  const BASE_URL = (IS_TAURI || IS_CAPACITOR) ? 'http://72.61.214.92:8080' : '';
+  return `${BASE_URL}${cleanPath}`;
 }
