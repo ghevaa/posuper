@@ -115,7 +115,7 @@ export default function POSPage() {
     queryKey: ['products'],
     queryFn: async () => {
       try {
-        const res = await api.get<{ data: ProductData[] }>('/products');
+        const res = await api.get<{ data: ProductData[] }>('/products?limit=1000');
         if (res.data) {
           cacheProducts(res.data as any);
         }

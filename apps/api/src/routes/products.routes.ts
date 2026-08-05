@@ -5,7 +5,7 @@
 import type { FastifyInstance } from 'fastify';
 import { db } from '../db/index.js';
 import { products, productVariants } from '../db/schema.js';
-import { eq, ilike, or, desc } from 'drizzle-orm';
+import { eq, ilike, or, desc, and } from 'drizzle-orm';
 import { nanoid } from 'nanoid';
 import { requireAuth, requireRole } from '../middleware/auth.middleware.js';
 import { createAuditLog } from '../middleware/logger.middleware.js';
@@ -21,13 +21,25 @@ const UPLOADS_DIR = path.join(__dirname, '../../uploads');
 export async function productRoutes(app: FastifyInstance) {
   // List products (all authenticated)
   app.get('/api/products', { preHandler: [requireAuth] }, async (req, reply) => {
-    const { search, categoryId, page = '1', limit = '20' } = req.query as any;
-    const offset = (Number(page) - 1) * Number(limit);
+    const { search, categoryId, page = '1', limit = '1000', includeInactive } = req.query as any;
+    const limitNum = Number(limit) || 1000;
+    const offset = (Number(page) - 1) * limitNum;
+
+    const conditions = [];
+    if (includeInactive !== 'true') {
+      conditions.push(eq(products.isActive, true));
+    }
+    if (categoryId) {
+      conditions.push(eq(products.categoryId, categoryId));
+    }
+
+    const whereClause = conditions.length > 0 ? (conditions.length === 1 ? conditions[0] : and(...conditions)) : undefined;
 
     // Fetch using findMany to include variants relationship
     const allProducts = await db.query.products.findMany({
+      where: whereClause,
       with: { variants: true },
-      limit: Number(limit),
+      limit: limitNum,
       offset: offset,
       orderBy: [desc(products.createdAt)],
     });

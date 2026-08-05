@@ -92,7 +92,7 @@ export default function AdminProducts() {
     queryKey: ['products'],
     queryFn: async () => {
       try {
-        const res = await api.get<{ data: Product[] }>('/products');
+        const res = await api.get<{ data: Product[] }>('/products?limit=1000');
         if (res.data) {
           cacheProducts(res.data as any);
         }
