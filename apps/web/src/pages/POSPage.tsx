@@ -1533,23 +1533,23 @@ export default function POSPage() {
       {/* Category Option Groups Modal */}
       {optionModalProduct && (
         <div className="modal-overlay" onClick={() => setOptionModalProduct(null)}>
-          <div className="modal-content max-w-md w-full" onClick={(e) => e.stopPropagation()}>
-            <div className="flex items-center justify-between mb-4 pb-2 border-b border-[var(--color-border)]">
+          <div className="modal-content max-w-md w-full bg-white text-slate-900" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-4 pb-2 border-b border-slate-200">
               <div>
-                <h3 className="text-lg font-bold">{optionModalProduct.name}</h3>
-                <p className="text-xs text-[var(--color-primary-400)] font-semibold">
+                <h3 className="text-lg font-bold text-slate-900">{optionModalProduct.name}</h3>
+                <p className="text-xs text-blue-600 font-semibold">
                   Harga dasar: {formatCurrency(Number(optionModalProduct.price))}
                 </p>
               </div>
-              <button onClick={() => setOptionModalProduct(null)} className="btn btn-ghost btn-icon"><X size={20} /></button>
+              <button onClick={() => setOptionModalProduct(null)} className="btn btn-ghost btn-icon text-slate-600 hover:text-slate-900"><X size={20} /></button>
             </div>
 
             <div className="space-y-4 max-h-[50vh] overflow-y-auto pr-1">
               {/* Product-Specific Variants (Varian Rasa / Submenu) */}
               {Array.isArray(optionModalProduct.variants) && optionModalProduct.variants.length > 0 && (
-                <div className="glass-card p-3 space-y-2 border border-blue-500/30">
+                <div className="bg-slate-50 p-3 space-y-2 border border-blue-200 rounded-xl">
                   <div className="flex items-center justify-between">
-                    <span className="font-bold text-sm text-slate-900 dark:text-white uppercase tracking-wide">Varian / Rasa Produk</span>
+                    <span className="font-extrabold text-sm text-slate-900 uppercase tracking-wide">Varian / Rasa Produk</span>
                     <span className="badge badge-info text-[10px]">Pilih 1</span>
                   </div>
                   <div className="space-y-1.5 pt-1">
@@ -1559,17 +1559,17 @@ export default function POSPage() {
                       onClick={() => setSelectedVariant(null)}
                       className={`w-full flex items-center justify-between p-2.5 rounded-lg border text-left transition-all ${
                         selectedVariant === null
-                          ? 'border-[var(--color-primary-500)] bg-[var(--color-primary-500)]/15 text-[var(--color-primary-600)] dark:text-white font-bold'
-                          : 'border-[var(--color-border)] bg-[var(--color-surface)] text-slate-800 dark:text-slate-200 hover:text-slate-900 dark:hover:text-white'
+                          ? 'border-blue-600 bg-blue-50 text-blue-900 font-bold'
+                          : 'border-slate-200 bg-white text-slate-800 hover:bg-slate-50 font-medium'
                       }`}
                     >
                       <div className="flex items-center gap-2">
-                        <div className={`w-4 h-4 rounded-full flex items-center justify-center border ${selectedVariant === null ? 'border-[var(--color-primary-500)] bg-[var(--color-primary-500)] text-white' : 'border-slate-400 dark:border-gray-500'}`}>
+                        <div className={`w-4 h-4 rounded-full flex items-center justify-center border ${selectedVariant === null ? 'border-blue-600 bg-blue-600 text-white' : 'border-slate-400 bg-white'}`}>
                           {selectedVariant === null && <div className="w-1.5 h-1.5 rounded-full bg-white" />}
                         </div>
-                        <span className="text-xs font-medium">Biasa / Regular</span>
+                        <span className="text-xs font-semibold text-slate-800">Biasa / Regular</span>
                       </div>
-                      <span className="text-xs font-mono text-emerald-600 dark:text-emerald-400 font-semibold">{formatCurrency(Number(optionModalProduct.price))}</span>
+                      <span className="text-xs font-mono text-emerald-700 font-bold">{formatCurrency(Number(optionModalProduct.price))}</span>
                     </button>
 
                     {/* Variant options */}
@@ -1583,19 +1583,19 @@ export default function POSPage() {
                           onClick={() => setSelectedVariant({ id: v.id, name: v.name, additionalPrice: vAddPrice })}
                           className={`w-full flex items-center justify-between p-2.5 rounded-lg border text-left transition-all ${
                             isSelected
-                              ? 'border-[var(--color-primary-500)] bg-[var(--color-primary-500)]/15 text-[var(--color-primary-600)] dark:text-white font-bold'
-                              : 'border-[var(--color-border)] bg-[var(--color-surface)] text-slate-800 dark:text-slate-200 hover:text-slate-900 dark:hover:text-white'
+                              ? 'border-blue-600 bg-blue-50 text-blue-900 font-bold'
+                              : 'border-slate-200 bg-white text-slate-800 hover:bg-slate-50 font-medium'
                           }`}
                         >
                           <div className="flex items-center gap-2">
-                            <div className={`w-4 h-4 rounded-full flex items-center justify-center border ${isSelected ? 'border-[var(--color-primary-500)] bg-[var(--color-primary-500)] text-white' : 'border-slate-400 dark:border-gray-500'}`}>
+                            <div className={`w-4 h-4 rounded-full flex items-center justify-center border ${isSelected ? 'border-blue-600 bg-blue-600 text-white' : 'border-slate-400 bg-white'}`}>
                               {isSelected && <div className="w-1.5 h-1.5 rounded-full bg-white" />}
                             </div>
-                            <span className="text-xs font-medium">{v.name}</span>
+                            <span className="text-xs font-semibold text-slate-800">{v.name}</span>
                           </div>
-                          <span className="text-xs font-mono text-emerald-600 dark:text-emerald-400 font-semibold">
+                          <span className="text-xs font-mono text-emerald-700 font-bold">
                             {formatCurrency(Number(optionModalProduct.price) + vAddPrice)}
-                            {vAddPrice > 0 && <span className="text-[10px] text-[var(--color-text-dim)] ml-1">(+{formatCurrency(vAddPrice)})</span>}
+                            {vAddPrice > 0 && <span className="text-[10px] text-slate-500 ml-1">(+{formatCurrency(vAddPrice)})</span>}
                           </span>
                         </button>
                       );
@@ -1636,9 +1636,9 @@ export default function POSPage() {
                   };
 
                   return (
-                    <div key={group.id} className="glass-card p-3 space-y-2">
+                    <div key={group.id} className="bg-slate-50 p-3 space-y-2 border border-slate-200 rounded-xl">
                       <div className="flex items-center justify-between">
-                        <span className="font-bold text-sm text-slate-900 dark:text-white uppercase tracking-wide">{group.name}</span>
+                        <span className="font-extrabold text-sm text-slate-900 uppercase tracking-wide">{group.name}</span>
                         <div className="flex gap-1">
                           {group.isRequired && <span className="badge badge-warning text-[10px]">Wajib</span>}
                           {group.isMultiple && <span className="badge badge-info text-[10px]">Pilihan Ganda</span>}
@@ -1656,20 +1656,20 @@ export default function POSPage() {
                               onClick={() => toggleOption({ name: opt.name, price: optPrice })}
                               className={`w-full flex items-center justify-between p-2.5 rounded-lg border text-left transition-all ${
                                 isChecked
-                                  ? 'border-[var(--color-primary-500)] bg-[var(--color-primary-500)]/15 text-[var(--color-primary-600)] dark:text-white font-bold'
-                                  : 'border-[var(--color-border)] bg-[var(--color-surface)] text-slate-800 dark:text-slate-200 hover:text-slate-900 dark:hover:text-white'
+                                  ? 'border-blue-600 bg-blue-50 text-blue-900 font-bold'
+                                  : 'border-slate-200 bg-white text-slate-800 hover:bg-slate-50 font-medium'
                               }`}
                             >
                               <div className="flex items-center gap-2">
-                                <div className={`w-4 h-4 rounded flex items-center justify-center border ${isChecked ? 'border-[var(--color-primary-500)] bg-[var(--color-primary-500)] text-white' : 'border-slate-400 dark:border-gray-500'}`}>
+                                <div className={`w-4 h-4 rounded flex items-center justify-center border ${isChecked ? 'border-blue-600 bg-blue-600 text-white' : 'border-slate-400 bg-white'}`}>
                                   {isChecked && <CheckCircle2 size={12} />}
                                 </div>
-                                <span className="text-xs font-medium">{opt.name}</span>
+                                <span className="text-xs font-semibold text-slate-800">{opt.name}</span>
                               </div>
                               {optPrice > 0 ? (
-                                <span className="text-xs font-mono text-emerald-600 dark:text-emerald-400 font-semibold">+Rp {optPrice.toLocaleString('id-ID')}</span>
+                                <span className="text-xs font-mono text-emerald-700 font-bold">+Rp {optPrice.toLocaleString('id-ID')}</span>
                               ) : (
-                                <span className="text-xs font-mono text-slate-500 dark:text-slate-400">Gratis</span>
+                                <span className="text-xs font-mono text-slate-500 font-medium">Gratis</span>
                               )}
                             </button>
                           );
@@ -1681,7 +1681,7 @@ export default function POSPage() {
             </div>
 
             {/* Total Preview & Add Button */}
-            <div className="pt-4 mt-4 border-t border-[var(--color-border)] space-y-3">
+            <div className="pt-4 mt-4 border-t border-slate-200 space-y-3">
               {(() => {
                 const groupsForProduct = allOptionGroups.filter(g => g.categoryId === optionModalProduct.categoryId || (Array.isArray(g.categoryIds) && (g.categoryIds.includes(optionModalProduct.categoryId || '') || g.categoryIds.includes('all'))));
                 const allSelected = Object.values(selectedOptions).flat();
@@ -1696,8 +1696,8 @@ export default function POSPage() {
                 return (
                   <>
                     <div className="flex justify-between items-center text-sm">
-                      <span className="text-[var(--color-text-muted)]">Total Harga Item</span>
-                      <span className="font-bold text-lg text-emerald-400">{formatCurrency(totalPrice)}</span>
+                      <span className="text-slate-700 font-bold">Total Harga Item</span>
+                      <span className="font-extrabold text-lg text-emerald-600">{formatCurrency(totalPrice)}</span>
                     </div>
 
                     <button
