@@ -1549,7 +1549,7 @@ export default function POSPage() {
               {Array.isArray(optionModalProduct.variants) && optionModalProduct.variants.length > 0 && (
                 <div className="glass-card p-3 space-y-2 border border-blue-500/30">
                   <div className="flex items-center justify-between">
-                    <span className="font-bold text-sm text-white">Varian / Rasa Produk</span>
+                    <span className="font-bold text-sm text-slate-900 dark:text-white uppercase tracking-wide">Varian / Rasa Produk</span>
                     <span className="badge badge-info text-[10px]">Pilih 1</span>
                   </div>
                   <div className="space-y-1.5 pt-1">
@@ -1559,17 +1559,17 @@ export default function POSPage() {
                       onClick={() => setSelectedVariant(null)}
                       className={`w-full flex items-center justify-between p-2.5 rounded-lg border text-left transition-all ${
                         selectedVariant === null
-                          ? 'border-[var(--color-primary-500)] bg-[var(--color-primary-500)]/15 text-white font-bold'
-                          : 'border-[var(--color-border)] bg-[var(--color-surface)] text-[var(--color-text-muted)] hover:text-white'
+                          ? 'border-[var(--color-primary-500)] bg-[var(--color-primary-500)]/15 text-[var(--color-primary-600)] dark:text-white font-bold'
+                          : 'border-[var(--color-border)] bg-[var(--color-surface)] text-slate-800 dark:text-slate-200 hover:text-slate-900 dark:hover:text-white'
                       }`}
                     >
                       <div className="flex items-center gap-2">
-                        <div className={`w-4 h-4 rounded-full flex items-center justify-center border ${selectedVariant === null ? 'border-[var(--color-primary-500)] bg-[var(--color-primary-500)] text-white' : 'border-gray-500'}`}>
+                        <div className={`w-4 h-4 rounded-full flex items-center justify-center border ${selectedVariant === null ? 'border-[var(--color-primary-500)] bg-[var(--color-primary-500)] text-white' : 'border-slate-400 dark:border-gray-500'}`}>
                           {selectedVariant === null && <div className="w-1.5 h-1.5 rounded-full bg-white" />}
                         </div>
                         <span className="text-xs font-medium">Biasa / Regular</span>
                       </div>
-                      <span className="text-xs font-mono text-emerald-400">{formatCurrency(Number(optionModalProduct.price))}</span>
+                      <span className="text-xs font-mono text-emerald-600 dark:text-emerald-400 font-semibold">{formatCurrency(Number(optionModalProduct.price))}</span>
                     </button>
 
                     {/* Variant options */}
@@ -1583,17 +1583,17 @@ export default function POSPage() {
                           onClick={() => setSelectedVariant({ id: v.id, name: v.name, additionalPrice: vAddPrice })}
                           className={`w-full flex items-center justify-between p-2.5 rounded-lg border text-left transition-all ${
                             isSelected
-                              ? 'border-[var(--color-primary-500)] bg-[var(--color-primary-500)]/15 text-white font-bold'
-                              : 'border-[var(--color-border)] bg-[var(--color-surface)] text-[var(--color-text-muted)] hover:text-white'
+                              ? 'border-[var(--color-primary-500)] bg-[var(--color-primary-500)]/15 text-[var(--color-primary-600)] dark:text-white font-bold'
+                              : 'border-[var(--color-border)] bg-[var(--color-surface)] text-slate-800 dark:text-slate-200 hover:text-slate-900 dark:hover:text-white'
                           }`}
                         >
                           <div className="flex items-center gap-2">
-                            <div className={`w-4 h-4 rounded-full flex items-center justify-center border ${isSelected ? 'border-[var(--color-primary-500)] bg-[var(--color-primary-500)] text-white' : 'border-gray-500'}`}>
+                            <div className={`w-4 h-4 rounded-full flex items-center justify-center border ${isSelected ? 'border-[var(--color-primary-500)] bg-[var(--color-primary-500)] text-white' : 'border-slate-400 dark:border-gray-500'}`}>
                               {isSelected && <div className="w-1.5 h-1.5 rounded-full bg-white" />}
                             </div>
                             <span className="text-xs font-medium">{v.name}</span>
                           </div>
-                          <span className="text-xs font-mono text-emerald-400">
+                          <span className="text-xs font-mono text-emerald-600 dark:text-emerald-400 font-semibold">
                             {formatCurrency(Number(optionModalProduct.price) + vAddPrice)}
                             {vAddPrice > 0 && <span className="text-[10px] text-[var(--color-text-dim)] ml-1">(+{formatCurrency(vAddPrice)})</span>}
                           </span>
@@ -1638,7 +1638,7 @@ export default function POSPage() {
                   return (
                     <div key={group.id} className="glass-card p-3 space-y-2">
                       <div className="flex items-center justify-between">
-                        <span className="font-bold text-sm text-white capitalize">{group.name}</span>
+                        <span className="font-bold text-sm text-slate-900 dark:text-white uppercase tracking-wide">{group.name}</span>
                         <div className="flex gap-1">
                           {group.isRequired && <span className="badge badge-warning text-[10px]">Wajib</span>}
                           {group.isMultiple && <span className="badge badge-info text-[10px]">Pilihan Ganda</span>}
@@ -1656,20 +1656,20 @@ export default function POSPage() {
                               onClick={() => toggleOption({ name: opt.name, price: optPrice })}
                               className={`w-full flex items-center justify-between p-2.5 rounded-lg border text-left transition-all ${
                                 isChecked
-                                  ? 'border-[var(--color-primary-500)] bg-[var(--color-primary-500)]/15 text-white'
-                                  : 'border-[var(--color-border)] bg-[var(--color-surface)] text-[var(--color-text-muted)] hover:text-white'
+                                  ? 'border-[var(--color-primary-500)] bg-[var(--color-primary-500)]/15 text-[var(--color-primary-600)] dark:text-white font-bold'
+                                  : 'border-[var(--color-border)] bg-[var(--color-surface)] text-slate-800 dark:text-slate-200 hover:text-slate-900 dark:hover:text-white'
                               }`}
                             >
                               <div className="flex items-center gap-2">
-                                <div className={`w-4 h-4 rounded flex items-center justify-center border ${isChecked ? 'border-[var(--color-primary-500)] bg-[var(--color-primary-500)] text-white' : 'border-gray-500'}`}>
+                                <div className={`w-4 h-4 rounded flex items-center justify-center border ${isChecked ? 'border-[var(--color-primary-500)] bg-[var(--color-primary-500)] text-white' : 'border-slate-400 dark:border-gray-500'}`}>
                                   {isChecked && <CheckCircle2 size={12} />}
                                 </div>
                                 <span className="text-xs font-medium">{opt.name}</span>
                               </div>
                               {optPrice > 0 ? (
-                                <span className="text-xs font-mono text-emerald-400">+Rp {optPrice.toLocaleString('id-ID')}</span>
+                                <span className="text-xs font-mono text-emerald-600 dark:text-emerald-400 font-semibold">+Rp {optPrice.toLocaleString('id-ID')}</span>
                               ) : (
-                                <span className="text-xs font-mono text-[var(--color-text-dim)]">Gratis</span>
+                                <span className="text-xs font-mono text-slate-500 dark:text-slate-400">Gratis</span>
                               )}
                             </button>
                           );
