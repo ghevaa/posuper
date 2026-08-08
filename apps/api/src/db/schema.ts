@@ -127,6 +127,7 @@ export const productVariants = pgTable(
     productId: text('product_id').notNull().references(() => products.id, { onDelete: 'cascade' }),
     name: text('name').notNull(),
     additionalPrice: numeric('additional_price', { precision: 12, scale: 2 }).notNull().default('0'),
+    cost: numeric('cost', { precision: 12, scale: 2 }).notNull().default('0'),
     createdAt: timestamp('created_at').defaultNow().notNull(),
     updatedAt: timestamp('updated_at').defaultNow().$onUpdate(() => new Date()).notNull(),
   },
@@ -141,7 +142,8 @@ export const categoryOptionGroups = pgTable(
   {
     id: text('id').primaryKey(),
     name: text('name').notNull(), // e.g. "extra saus"
-    categoryId: text('category_id').notNull().references(() => categories.id, { onDelete: 'cascade' }),
+    categoryId: text('category_id').references(() => categories.id, { onDelete: 'cascade' }),
+    categoryIds: jsonb('category_ids').default([]), // Array of category IDs or ['all']
     isRequired: boolean('is_required').notNull().default(false), // "Wajib dipilih"
     isMultiple: boolean('is_multiple').notNull().default(false), // "Pilihan Ganda"
     minSelect: integer('min_select').notNull().default(0),
@@ -161,6 +163,7 @@ export const categoryOptions = pgTable(
     groupId: text('group_id').notNull().references(() => categoryOptionGroups.id, { onDelete: 'cascade' }),
     name: text('name').notNull(), // e.g. "extra bbq spicy"
     price: numeric('price', { precision: 12, scale: 2 }).notNull().default('0'), // e.g. 3000
+    cost: numeric('cost', { precision: 12, scale: 2 }).notNull().default('0'),
     createdAt: timestamp('created_at').defaultNow().notNull(),
   },
   (table) => [

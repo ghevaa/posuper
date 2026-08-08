@@ -14,6 +14,7 @@ interface ProductVariant {
   id?: string;
   name: string;
   additionalPrice: string;
+  cost?: string;
 }
 
 interface Product {
@@ -148,7 +149,7 @@ export default function AdminProducts() {
   const openEdit = (p: Product) => {
     setEditing(p);
     setForm({ name: p.name, price: p.price, cost: p.cost, stock: String(p.stock), barcode: p.barcode || '', sku: p.sku || '', categoryId: p.categoryId || '', image: p.image || '' });
-    setVariants(p.variants ? p.variants.map((v) => ({ id: v.id, name: v.name, additionalPrice: String(Number(v.additionalPrice)) })) : []);
+    setVariants(p.variants ? p.variants.map((v) => ({ id: v.id, name: v.name, additionalPrice: String(Number(v.additionalPrice)), cost: String(Number(v.cost || 0)) })) : []);
     setShowForm(true);
   };
   const closeForm = () => {
@@ -161,14 +162,15 @@ export default function AdminProducts() {
     e.preventDefault();
     const data = {
       ...form,
-      price: Number(form.price),
-      cost: Number(form.cost),
-      stock: Number(form.stock),
+      price: Number(form.price || 0),
+      cost: Number(form.cost || 0),
+      stock: Number(form.stock || 0),
       categoryId: form.categoryId || null,
       image: form.image || null,
       variants: variants.map((v) => ({
         name: v.name,
-        additionalPrice: Number(v.additionalPrice || 0)
+        additionalPrice: Number(v.additionalPrice || 0),
+        cost: Number(v.cost || 0)
       }))
     };
     if (editing) updateMutation.mutate({ id: editing.id, data });
@@ -243,8 +245,8 @@ export default function AdminProducts() {
             <form onSubmit={handleSubmit} className="space-y-4">
               <div><label className="text-sm font-medium text-[var(--color-text-muted)] mb-1 block">Nama</label><input className="input" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} required /></div>
               <div className="grid grid-cols-2 gap-3">
-                <div><label className="text-sm font-medium text-[var(--color-text-muted)] mb-1 block">Harga Jual</label><input type="number" className="input" value={form.price} onChange={(e) => setForm({ ...form, price: e.target.value })} required /></div>
-                <div><label className="text-sm font-medium text-[var(--color-text-muted)] mb-1 block">Harga Modal</label><input type="number" className="input" value={form.cost} onChange={(e) => setForm({ ...form, cost: e.target.value })} /></div>
+                <div><label className="text-sm font-medium text-[var(--color-text-muted)] mb-1 block">Harga Jual (Opsional)</label><input type="number" className="input" placeholder="0 (Opsional jika pakai Varian)" value={form.price} onChange={(e) => setForm({ ...form, price: e.target.value })} /></div>
+                <div><label className="text-sm font-medium text-[var(--color-text-muted)] mb-1 block">Harga Modal Produk</label><input type="number" className="input" placeholder="0" value={form.cost} onChange={(e) => setForm({ ...form, cost: e.target.value })} /></div>
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div><label className="text-sm font-medium text-[var(--color-text-muted)] mb-1 block">Stok</label><input type="number" className="input" value={form.stock} onChange={(e) => setForm({ ...form, stock: e.target.value })} /></div>
@@ -283,7 +285,7 @@ export default function AdminProducts() {
                   <label className="text-sm font-medium text-[var(--color-text-muted)]">Varian / Submenu (Opsional)</label>
                   <button
                     type="button"
-                    onClick={() => setVariants([...variants, { name: '', additionalPrice: '0' }])}
+                    onClick={() => setVariants([...variants, { name: '', additionalPrice: '0', cost: '0' }])}
                     className="btn btn-secondary btn-sm py-1 px-2 text-xs"
                   >
                     + Tambah Varian
@@ -291,13 +293,12 @@ export default function AdminProducts() {
                 </div>
                 
                 {variants.length > 0 && (
-                  <div className="space-y-2 max-h-40 overflow-y-auto p-2 bg-[var(--color-surface)] rounded-lg border border-[var(--color-border)]">
+                  <div className="space-y-2 max-h-48 overflow-y-auto p-2 bg-[var(--color-surface)] rounded-lg border border-[var(--color-border)]">
                     {variants.map((v, i) => (
-                      <div key={i} className="flex gap-2 items-center w-full">
+                      <div key={i} className="flex gap-1.5 items-center w-full">
                         <input
-                          placeholder="Nama (misal: 2 Keju)"
-                          className="input input-sm text-xs"
-                          style={{ flex: '1 1 0%', minWidth: 0, width: 'auto' }}
+                          placeholder="Nama Varian"
+                          className="input input-sm text-xs flex-1"
                           value={v.name}
                           onChange={(e) => {
                             const newVariants = [...variants];
@@ -308,9 +309,8 @@ export default function AdminProducts() {
                         />
                         <input
                           type="number"
-                          placeholder="Harga Tambah"
-                          className="input input-sm text-xs"
-                          style={{ width: '120px', flex: '0 0 auto' }}
+                          placeholder="Harga Jual"
+                          className="input input-sm text-xs w-24"
                           value={v.additionalPrice}
                           onChange={(e) => {
                             const newVariants = [...variants];
@@ -319,10 +319,21 @@ export default function AdminProducts() {
                           }}
                           required
                         />
+                        <input
+                          type="number"
+                          placeholder="Modal"
+                          className="input input-sm text-xs w-20"
+                          value={v.cost || '0'}
+                          onChange={(e) => {
+                            const newVariants = [...variants];
+                            newVariants[i].cost = e.target.value;
+                            setVariants(newVariants);
+                          }}
+                        />
                         <button
                           type="button"
                           onClick={() => setVariants(variants.filter((_, idx) => idx !== i))}
-                          className="btn btn-ghost btn-icon btn-sm text-red-400 p-1"
+                          className="btn btn-ghost btn-icon btn-sm text-red-400 p-1 shrink-0"
                         >
                           <X size={14} />
                         </button>

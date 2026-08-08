@@ -17,10 +17,11 @@ export async function categoryOptionsRoutes(app: FastifyInstance) {
     
     const result = await Promise.all(groups.map(async (group) => {
       const options = await db.select().from(categoryOptions).where(eq(categoryOptions.groupId, group.id));
-      const cat = await db.select({ name: categories.name }).from(categories).where(eq(categories.id, group.categoryId)).limit(1);
+      const primaryCatId = group.categoryId || (Array.isArray(group.categoryIds) ? group.categoryIds[0] : null);
+      const cat = primaryCatId ? await db.select({ name: categories.name }).from(categories).where(eq(categories.id, primaryCatId)).limit(1) : [];
       return {
         ...group,
-        categoryName: cat[0]?.name || '',
+        categoryName: cat[0]?.name || (Array.isArray(group.categoryIds) && group.categoryIds.includes('all') ? 'Semua Kategori' : ''),
         options,
       };
     }));
@@ -31,7 +32,14 @@ export async function categoryOptionsRoutes(app: FastifyInstance) {
   // Get option groups for a category
   app.get('/api/categories/:categoryId/option-groups', async (req, reply) => {
     const { categoryId } = req.params as { categoryId: string };
-    const groups = await db.select().from(categoryOptionGroups).where(eq(categoryOptionGroups.categoryId, categoryId));
+    const allGroups = await db.select().from(categoryOptionGroups);
+    const groups = allGroups.filter(g => {
+      if (g.categoryId === categoryId) return true;
+      if (Array.isArray(g.categoryIds)) {
+        return g.categoryIds.includes(categoryId) || g.categoryIds.includes('all');
+      }
+      return false;
+    });
 
     const result = await Promise.all(groups.map(async (group) => {
       const options = await db.select().from(categoryOptions).where(eq(categoryOptions.groupId, group.id));
@@ -46,10 +54,12 @@ export async function categoryOptionsRoutes(app: FastifyInstance) {
 
   // Create option group with options (admin+)
   app.post('/api/category-option-groups', { preHandler: [requireRole('developer', 'admin')] }, async (req, reply) => {
-    const { name, categoryId, isRequired, isMultiple, minSelect, maxSelect, options } = req.body as any;
+    const { name, categoryId, categoryIds, isRequired, isMultiple, minSelect, maxSelect, options } = req.body as any;
 
-    if (!name || !categoryId) {
-      return reply.status(400).send({ success: false, error: 'Nama grup opsi dan kategori wajib diisi' });
+    const catIds = Array.isArray(categoryIds) && categoryIds.length > 0 ? categoryIds : (categoryId ? [categoryId] : []);
+
+    if (!name || catIds.length === 0) {
+      return reply.status(400).send({ success: false, error: 'Nama grup opsi dan minimal 1 kategori terkait wajib diisi' });
     }
 
     const groupId = nanoid();
@@ -57,7 +67,8 @@ export async function categoryOptionsRoutes(app: FastifyInstance) {
     await db.insert(categoryOptionGroups).values({
       id: groupId,
       name,
-      categoryId,
+      categoryId: catIds[0] !== 'all' ? catIds[0] : null,
+      categoryIds: catIds,
       isRequired: Boolean(isRequired),
       isMultiple: Boolean(isMultiple),
       minSelect: Number(minSelect || 0),
@@ -72,6 +83,7 @@ export async function categoryOptionsRoutes(app: FastifyInstance) {
             groupId,
             name: opt.name,
             price: String(opt.price || 0),
+            cost: String(opt.cost || 0),
           });
         }
       }
@@ -85,12 +97,15 @@ export async function categoryOptionsRoutes(app: FastifyInstance) {
   // Update option group with options (admin+)
   app.put('/api/category-option-groups/:id', { preHandler: [requireRole('developer', 'admin')] }, async (req, reply) => {
     const { id } = req.params as { id: string };
-    const { name, categoryId, isRequired, isMultiple, minSelect, maxSelect, options } = req.body as any;
+    const { name, categoryId, categoryIds, isRequired, isMultiple, minSelect, maxSelect, options } = req.body as any;
+
+    const catIds = Array.isArray(categoryIds) && categoryIds.length > 0 ? categoryIds : (categoryId ? [categoryId] : []);
 
     await db.update(categoryOptionGroups)
       .set({
         name,
-        categoryId,
+        categoryId: catIds[0] !== 'all' ? catIds[0] : null,
+        categoryIds: catIds,
         isRequired: Boolean(isRequired),
         isMultiple: Boolean(isMultiple),
         minSelect: Number(minSelect || 0),
@@ -109,6 +124,7 @@ export async function categoryOptionsRoutes(app: FastifyInstance) {
             groupId: id,
             name: opt.name,
             price: String(opt.price || 0),
+            cost: String(opt.cost || 0),
           });
         }
       }

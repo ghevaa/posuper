@@ -20,12 +20,14 @@ interface OptionItem {
   id?: string;
   name: string;
   price: number;
+  cost?: number;
 }
 
 interface CategoryOptionGroup {
   id: string;
   name: string;
-  categoryId: string;
+  categoryId?: string;
+  categoryIds?: string[];
   categoryName?: string;
   isRequired: boolean;
   isMultiple: boolean;
@@ -47,14 +49,24 @@ export default function AdminCategories() {
   const [showGroupForm, setShowGroupForm] = useState(false);
   const [groupModalTab, setGroupModalTab] = useState<'name' | 'type'>('name');
   const [editingGroup, setEditingGroup] = useState<CategoryOptionGroup | null>(null);
-  const [groupForm, setGroupForm] = useState({
+  const [groupForm, setGroupForm] = useState<{
+    name: string;
+    categoryId: string;
+    categoryIds: string[];
+    isRequired: boolean;
+    isMultiple: boolean;
+    minSelect: number;
+    maxSelect: number;
+    options: { name: string; price: number; cost: number }[];
+  }>({
     name: '',
     categoryId: '',
+    categoryIds: ['all'],
     isRequired: false,
     isMultiple: false,
     minSelect: 0,
     maxSelect: 1,
-    options: [{ name: '', price: 0 }],
+    options: [{ name: '', price: 0, cost: 0 }],
   });
 
   // Stock Opname Category Form State
@@ -240,11 +252,12 @@ export default function AdminCategories() {
     setGroupForm({
       name: '',
       categoryId: categories[0]?.id || '',
+      categoryIds: ['all'],
       isRequired: false,
       isMultiple: false,
       minSelect: 0,
       maxSelect: 1,
-      options: [{ name: '', price: 0 }],
+      options: [{ name: '', price: 0, cost: 0 }],
     });
     setShowGroupForm(true);
   };
@@ -252,14 +265,16 @@ export default function AdminCategories() {
   const openEditGroup = (g: CategoryOptionGroup) => {
     setEditingGroup(g);
     setGroupModalTab('name');
+    const catIds = g.categoryIds && g.categoryIds.length > 0 ? g.categoryIds : (g.categoryId ? [g.categoryId] : ['all']);
     setGroupForm({
       name: g.name,
-      categoryId: g.categoryId,
+      categoryId: g.categoryId || '',
+      categoryIds: catIds,
       isRequired: g.isRequired,
       isMultiple: g.isMultiple,
       minSelect: g.minSelect,
       maxSelect: g.maxSelect,
-      options: g.options.length > 0 ? g.options.map(o => ({ name: o.name, price: Number(o.price) })) : [{ name: '', price: 0 }],
+      options: g.options.length > 0 ? g.options.map(o => ({ name: o.name, price: Number(o.price), cost: Number(o.cost || 0) })) : [{ name: '', price: 0, cost: 0 }],
     });
     setShowGroupForm(true);
   };
@@ -272,7 +287,7 @@ export default function AdminCategories() {
   const handleAddOptionRow = () => {
     setGroupForm(prev => ({
       ...prev,
-      options: [...prev.options, { name: '', price: 0 }],
+      options: [...prev.options, { name: '', price: 0, cost: 0 }],
     }));
   };
 
@@ -283,7 +298,7 @@ export default function AdminCategories() {
     }));
   };
 
-  const handleOptionChange = (index: number, field: 'name' | 'price', val: any) => {
+  const handleOptionChange = (index: number, field: 'name' | 'price' | 'cost', val: any) => {
     setGroupForm(prev => {
       const updated = [...prev.options];
       updated[index] = { ...updated[index], [field]: val };
@@ -297,13 +312,14 @@ export default function AdminCategories() {
       toast.error('Nama grup opsi wajib diisi');
       return;
     }
-    if (!groupForm.categoryId) {
-      toast.error('Kategori wajib dipilih');
+    if (!groupForm.categoryIds || groupForm.categoryIds.length === 0) {
+      toast.error('Minimal 1 kategori wajib dipilih');
       return;
     }
 
     const payload = {
       ...groupForm,
+      categoryId: groupForm.categoryIds[0] !== 'all' ? groupForm.categoryIds[0] : null,
       options: groupForm.options.filter(o => o.name.trim() !== ''),
     };
 
@@ -620,18 +636,44 @@ export default function AdminCategories() {
                   </div>
 
                   <div>
-                    <label className="text-xs font-semibold text-[var(--color-text-muted)] mb-1 block">Kategori Terkait</label>
-                    <select
-                      className="input"
-                      value={groupForm.categoryId}
-                      onChange={(e) => setGroupForm({ ...groupForm, categoryId: e.target.value })}
-                      required
-                    >
-                      <option value="">Pilih Kategori</option>
-                      {categories.map(c => (
-                        <option key={c.id} value={c.id}>{c.icon} {c.name}</option>
-                      ))}
-                    </select>
+                    <label className="text-xs font-semibold text-[var(--color-text-muted)] mb-1 block">Kategori Terkait (Dapat memilih lebih dari 1)</label>
+                    <div className="p-3 glass-card rounded-lg space-y-2 border border-[var(--color-border)] max-h-40 overflow-y-auto">
+                      <label className="flex items-center gap-2 cursor-pointer text-xs font-bold text-lime-400 pb-1.5 border-b border-[var(--color-border)]">
+                        <input
+                          type="checkbox"
+                          checked={groupForm.categoryIds.includes('all')}
+                          onChange={(e) => {
+                            if (e.target.checked) {
+                              setGroupForm({ ...groupForm, categoryIds: ['all'] });
+                            } else {
+                              setGroupForm({ ...groupForm, categoryIds: categories[0] ? [categories[0].id] : [] });
+                            }
+                          }}
+                        />
+                        <span>🌟 Semua Kategori (Global)</span>
+                      </label>
+                      {categories.map(c => {
+                        const isChecked = groupForm.categoryIds.includes('all') || groupForm.categoryIds.includes(c.id);
+                        return (
+                          <label key={c.id} className="flex items-center gap-2 cursor-pointer text-xs text-white hover:text-cyan-300">
+                            <input
+                              type="checkbox"
+                              checked={isChecked}
+                              disabled={groupForm.categoryIds.includes('all')}
+                              onChange={(e) => {
+                                const current = groupForm.categoryIds.filter(id => id !== 'all');
+                                if (e.target.checked) {
+                                  setGroupForm({ ...groupForm, categoryIds: [...current, c.id] });
+                                } else {
+                                  setGroupForm({ ...groupForm, categoryIds: current.filter(id => id !== c.id) });
+                                }
+                              }}
+                            />
+                            <span>{c.icon} {c.name}</span>
+                          </label>
+                        );
+                      })}
+                    </div>
                   </div>
 
                   {/* Options List */}
@@ -652,27 +694,37 @@ export default function AdminCategories() {
                         <div key={idx} className="flex gap-2 items-center glass-card p-2 bg-[var(--color-surface-lighter)]">
                           <input
                             type="text"
-                            placeholder="Contoh: extra bbq spicy"
+                            placeholder="Nama opsi (misal: extra saus mentai)"
                             className="input text-xs flex-1 py-1.5"
                             value={opt.name}
                             onChange={(e) => handleOptionChange(idx, 'name', e.target.value)}
                             required
                           />
-                          <div className="w-32 relative">
-                            <span className="absolute left-2 top-2 text-[10px] text-[var(--color-text-dim)]">Rp</span>
+                          <div className="w-24 relative">
+                            <span className="absolute left-1.5 top-2 text-[10px] text-[var(--color-text-dim)]">Jual:</span>
                             <input
                               type="number"
                               placeholder="0"
-                              className="input text-xs pl-7 py-1.5 font-mono"
+                              className="input text-xs pl-9 py-1.5 font-mono"
                               value={opt.price}
                               onChange={(e) => handleOptionChange(idx, 'price', Number(e.target.value))}
+                            />
+                          </div>
+                          <div className="w-24 relative">
+                            <span className="absolute left-1.5 top-2 text-[10px] text-[var(--color-text-dim)]">Modal:</span>
+                            <input
+                              type="number"
+                              placeholder="0"
+                              className="input text-xs pl-11 py-1.5 font-mono"
+                              value={opt.cost || 0}
+                              onChange={(e) => handleOptionChange(idx, 'cost', Number(e.target.value))}
                             />
                           </div>
                           {groupForm.options.length > 1 && (
                             <button
                               type="button"
                               onClick={() => handleRemoveOptionRow(idx)}
-                              className="btn btn-ghost btn-icon btn-sm text-red-400"
+                              className="btn btn-ghost btn-icon btn-sm text-red-400 shrink-0"
                             >
                               <Trash2 size={14} />
                             </button>

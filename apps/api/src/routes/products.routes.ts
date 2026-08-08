@@ -100,6 +100,7 @@ export async function productRoutes(app: FastifyInstance) {
           productId: id,
           name: v.name,
           additionalPrice: String(v.additionalPrice || 0),
+          cost: String(v.cost || 0),
         });
       }
     }
@@ -138,6 +139,7 @@ export async function productRoutes(app: FastifyInstance) {
             productId: id,
             name: v.name,
             additionalPrice: String(v.additionalPrice || 0),
+            cost: String(v.cost || 0),
           });
         }
       }

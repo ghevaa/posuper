@@ -357,8 +357,9 @@ export async function printReceipt(receipt: ReceiptData): Promise<void> {
 
   // Items
   for (const item of receipt.items) {
-    const hasVariant = item.variantName && !item.name.toLowerCase().includes(`(${item.variantName.toLowerCase()})`);
-    const itemName = hasVariant ? `${item.name} (${item.variantName})` : item.name;
+    const cleanVariant = item.variantName ? item.variantName.replace(/\s*\(\+Rp\s*0\)/gi, '') : '';
+    const hasVariant = Boolean(cleanVariant) && !item.name.toLowerCase().includes(`(${cleanVariant.toLowerCase()})`);
+    const itemName = (hasVariant && cleanVariant) ? `${item.name} (${cleanVariant})` : item.name;
 
     const nameLines = wrapText(itemName, paperWidth);
     for (const nameLine of nameLines) {

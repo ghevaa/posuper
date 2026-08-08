@@ -132,6 +132,9 @@ async function start() {
       );
       ALTER TABLE "stock_opname_items" ADD COLUMN IF NOT EXISTS "category_id" text;
       ALTER TABLE "stock_opname_items" ADD COLUMN IF NOT EXISTS "stock_in_entries" jsonb DEFAULT '[]'::jsonb NOT NULL;
+      ALTER TABLE "product_variants" ADD COLUMN IF NOT EXISTS "cost" numeric(12, 2) DEFAULT '0' NOT NULL;
+      ALTER TABLE "category_options" ADD COLUMN IF NOT EXISTS "cost" numeric(12, 2) DEFAULT '0' NOT NULL;
+      ALTER TABLE "category_option_groups" ADD COLUMN IF NOT EXISTS "category_ids" jsonb DEFAULT '[]'::jsonb;
     `);
 
     // Seed default stock opname categories if empty

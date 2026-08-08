@@ -59,8 +59,9 @@ export function generateReceiptText(data: ReceiptTextData): string {
 
   for (const item of data.items) {
     const name = item.productName || item.name || '';
-    const hasVariant = item.variantName && !name.toLowerCase().includes(`(${item.variantName.toLowerCase()})`);
-    const itemName = hasVariant ? `${name} (${item.variantName})` : name;
+    const cleanVariant = item.variantName ? item.variantName.replace(/\s*\(\+Rp\s*0\)/gi, '') : '';
+    const hasVariant = Boolean(cleanVariant) && !name.toLowerCase().includes(`(${cleanVariant.toLowerCase()})`);
+    const itemName = (hasVariant && cleanVariant) ? `${name} (${cleanVariant})` : name;
     lines.push(itemName);
     const qtyPrice = `  ${item.qty}x ${formatCurrency(item.price || 0)}`;
     const lineTotal = formatCurrency(item.qty * (item.price || 0));

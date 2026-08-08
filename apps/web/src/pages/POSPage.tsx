@@ -1606,7 +1606,7 @@ export default function POSPage() {
 
               {/* Category Option Groups */}
               {allOptionGroups
-                .filter(g => g.categoryId === optionModalProduct.categoryId)
+                .filter(g => g.categoryId === optionModalProduct.categoryId || (Array.isArray(g.categoryIds) && (g.categoryIds.includes(optionModalProduct.categoryId || '') || g.categoryIds.includes('all'))))
                 .map(group => {
                   const currentSelected = selectedOptions[group.id] || [];
 
@@ -1648,11 +1648,12 @@ export default function POSPage() {
                       <div className="space-y-1.5 pt-1">
                         {group.options?.map((opt: any) => {
                           const isChecked = currentSelected.some(s => s.name === opt.name);
+                          const optPrice = Number(opt.price) || 0;
                           return (
                             <button
                               key={opt.id || opt.name}
                               type="button"
-                              onClick={() => toggleOption({ name: opt.name, price: Number(opt.price) })}
+                              onClick={() => toggleOption({ name: opt.name, price: optPrice })}
                               className={`w-full flex items-center justify-between p-2.5 rounded-lg border text-left transition-all ${
                                 isChecked
                                   ? 'border-[var(--color-primary-500)] bg-[var(--color-primary-500)]/15 text-white'
@@ -1665,7 +1666,11 @@ export default function POSPage() {
                                 </div>
                                 <span className="text-xs font-medium">{opt.name}</span>
                               </div>
-                              <span className="text-xs font-mono text-emerald-400">+Rp {Number(opt.price).toLocaleString('id-ID')}</span>
+                              {optPrice > 0 ? (
+                                <span className="text-xs font-mono text-emerald-400">+Rp {optPrice.toLocaleString('id-ID')}</span>
+                              ) : (
+                                <span className="text-xs font-mono text-[var(--color-text-dim)]">Gratis</span>
+                              )}
                             </button>
                           );
                         })}
@@ -1678,11 +1683,15 @@ export default function POSPage() {
             {/* Total Preview & Add Button */}
             <div className="pt-4 mt-4 border-t border-[var(--color-border)] space-y-3">
               {(() => {
-                const groupsForProduct = allOptionGroups.filter(g => g.categoryId === optionModalProduct.categoryId);
+                const groupsForProduct = allOptionGroups.filter(g => g.categoryId === optionModalProduct.categoryId || (Array.isArray(g.categoryIds) && (g.categoryIds.includes(optionModalProduct.categoryId || '') || g.categoryIds.includes('all'))));
                 const allSelected = Object.values(selectedOptions).flat();
-                const variantAddPrice = selectedVariant ? selectedVariant.additionalPrice : 0;
+                
+                const basePrice = Number(optionModalProduct.price) || 0;
+                const variantPrice = selectedVariant ? Number(selectedVariant.additionalPrice) : 0;
                 const optionsAddPrice = allSelected.reduce((sum, item) => sum + item.price, 0);
-                const totalPrice = Number(optionModalProduct.price) + variantAddPrice + optionsAddPrice;
+                
+                const mainItemPrice = basePrice > 0 ? (basePrice + variantPrice) : (variantPrice > 0 ? variantPrice : basePrice);
+                const totalPrice = mainItemPrice + optionsAddPrice;
 
                 return (
                   <>
@@ -1707,26 +1716,42 @@ export default function POSPage() {
                           }
                         }
 
-                        // Combine variant & option names
-                        const variantParts = [
+                        // Separate zero-price options vs extra-price options
+                        const zeroPriceOptions = allSelected.filter(s => s.price === 0);
+                        const extraPriceOptions = allSelected.filter(s => s.price > 0);
+
+                        // Main variant name string (without (+Rp 0))
+                        const mainVariantParts = [
                           selectedVariant?.name,
-                          ...allSelected.map(s => `${s.name} (+Rp ${s.price.toLocaleString('id-ID')})`)
+                          ...zeroPriceOptions.map(s => s.name)
                         ].filter(Boolean);
 
-                        const combinedVariantName = variantParts.join(', ');
+                        const mainVariantName = mainVariantParts.join(', ');
 
+                        // 1. Add Main Item
                         addItem(
                           {
                             id: optionModalProduct.id,
                             name: optionModalProduct.name,
-                            price: Number(optionModalProduct.price)
+                            price: mainItemPrice
                           },
-                          variantParts.length > 0 ? {
-                            id: selectedVariant?.id || ('opt_' + Math.random().toString(36).substring(2, 9)),
-                            name: combinedVariantName,
-                            additionalPrice: variantAddPrice + optionsAddPrice
+                          mainVariantName ? {
+                            id: selectedVariant?.id || ('var_' + Math.random().toString(36).substring(2, 9)),
+                            name: mainVariantName,
+                            additionalPrice: 0
                           } : undefined
                         );
+
+                        // 2. Add Extra Options as separate sub-items
+                        for (const opt of extraPriceOptions) {
+                          const grp = groupsForProduct.find(g => (selectedOptions[g.id] || []).some(s => s.name === opt.name));
+                          const subTitle = grp ? `+ ${grp.name} ${opt.name}` : `+ ${opt.name}`;
+                          addItem({
+                            id: 'sub_' + Math.random().toString(36).substring(2, 9),
+                            name: subTitle,
+                            price: opt.price
+                          });
+                        }
 
                         toast.success(`${optionModalProduct.name} ditambahkan`, { duration: 1000, icon: '🛒' });
                         setOptionModalProduct(null);
