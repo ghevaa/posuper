@@ -450,7 +450,7 @@ export default function AdminCategories() {
               <div key={g.id} className="glass-card p-5 space-y-4">
                 <div className="flex items-start justify-between">
                   <div>
-                    <h3 className="font-bold text-base text-white capitalize">{g.name}</h3>
+                    <h3 className="font-bold text-base text-[var(--color-text)] capitalize">{g.name}</h3>
                     <p className="text-xs text-[var(--color-primary-400)] font-medium mt-0.5">
                       Kategori: {g.categoryName || 'General'}
                     </p>
@@ -482,7 +482,7 @@ export default function AdminCategories() {
                 <div className="space-y-1.5 pt-2 border-t border-[var(--color-border)]">
                   {g.options.map(opt => (
                     <div key={opt.id} className="flex justify-between items-center text-xs py-1 px-2 rounded bg-[var(--color-surface-lighter)]">
-                      <span className="font-medium text-gray-200">{opt.name}</span>
+                      <span className="font-medium text-[var(--color-text)]">{opt.name}</span>
                       <span className="font-mono text-emerald-400">+Rp {Number(opt.price).toLocaleString('id-ID')}</span>
                     </div>
                   ))}
@@ -512,7 +512,7 @@ export default function AdminCategories() {
                     <ClipboardList size={20} />
                   </div>
                   <div className="min-w-0">
-                    <h3 className="font-semibold text-base text-white truncate">{c.name}</h3>
+                    <h3 className="font-bold text-base text-[var(--color-text)] truncate">{c.name}</h3>
                     <p className="text-xs text-[var(--color-text-muted)]">Kategori Bahan Stok Opname</p>
                   </div>
                 </div>

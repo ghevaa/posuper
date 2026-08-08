@@ -44,6 +44,42 @@ export async function backupRoutes(app: FastifyInstance) {
     });
   });
 
+  // Full Database Backup JSON Export (admin & dev)
+  app.get('/api/backup/export', { preHandler: [requireRole('developer', 'admin')] }, async (req, reply) => {
+    const schema = await import('../db/schema.js');
+    const backupData = {
+      app: 'POS Yoga',
+      version: '0.1.52',
+      exportedAt: new Date().toISOString(),
+      data: {
+        users: await db.select().from(schema.user),
+        categories: await db.select().from(schema.categories),
+        products: await db.select().from(schema.products),
+        productVariants: await db.select().from(schema.productVariants),
+        categoryOptionGroups: await db.select().from(schema.categoryOptionGroups),
+        categoryOptions: await db.select().from(schema.categoryOptions),
+        customers: await db.select().from(schema.customers),
+        transactions: await db.select().from(schema.transactions),
+        transactionItems: await db.select().from(schema.transactionItems),
+        payments: await db.select().from(schema.payments),
+        cashShifts: await db.select().from(schema.cashShifts),
+        expenses: await db.select().from(schema.expenses),
+        stockOpnameCategories: await db.select().from(schema.stockOpnameCategories),
+        stockOpnameSessions: await db.select().from(schema.stockOpnameSessions),
+        stockOpnameItems: await db.select().from(schema.stockOpnameItems),
+        settings: await db.select().from(schema.settings),
+        logs: await db.select().from(schema.logs),
+      }
+    };
+
+    await createAuditLog(req, 'backup.downloaded', 'Full database JSON backup downloaded');
+
+    const fileName = `backup-posyoga-${new Date().toISOString().slice(0, 10)}.json`;
+    reply.header('Content-Type', 'application/json');
+    reply.header('Content-Disposition', `attachment; filename="${fileName}"`);
+    return reply.send(JSON.stringify(backupData, null, 2));
+  });
+
   // Backup placeholder (pg_dump needs shell access — handled by Tauri/desktop)
   app.post('/api/backup', { preHandler: [requireRole('developer')] }, async (req, reply) => {
     await createAuditLog(req, 'backup.requested', 'Manual backup requested');
