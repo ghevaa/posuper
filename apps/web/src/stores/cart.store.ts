@@ -25,7 +25,8 @@ interface CartState {
   globalNote: string;
   addItem: (
     product: { id: string; name: string; price: number },
-    variant?: { id: string; name: string; additionalPrice: number }
+    variant?: { id: string; name: string; additionalPrice: number },
+    customCartItemId?: string
   ) => void;
   removeItem: (cartItemId: string) => void;
   updateQty: (cartItemId: string, qty: number) => void;
@@ -51,12 +52,12 @@ export const useCartStore = create<CartState>((set, get) => ({
   discountValue: 0,
   globalNote: '',
 
-  addItem: (product, variant) => {
+  addItem: (product, variant, customCartItemId) => {
     set((state) => {
       const finalPrice = product.price + (variant ? Number(variant.additionalPrice) : 0);
       const variantId = variant?.id;
       const variantName = variant?.name;
-      const cartItemId = product.id + (variantId ? `-${variantId}` : '');
+      const cartItemId = customCartItemId || (product.id + (variantId ? `-${variantId}` : ''));
 
       const existing = state.items.find((i) => i.cartItemId === cartItemId);
       if (existing) {

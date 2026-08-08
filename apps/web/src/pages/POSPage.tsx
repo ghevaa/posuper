@@ -1746,11 +1746,15 @@ export default function POSPage() {
                         for (const opt of extraPriceOptions) {
                           const grp = groupsForProduct.find(g => (selectedOptions[g.id] || []).some(s => s.name === opt.name));
                           const subTitle = grp ? `+ ${grp.name} ${opt.name}` : `+ ${opt.name}`;
-                          addItem({
-                            id: 'sub_' + Math.random().toString(36).substring(2, 9),
-                            name: subTitle,
-                            price: opt.price
-                          });
+                          addItem(
+                            {
+                              id: optionModalProduct.id,
+                              name: subTitle,
+                              price: opt.price
+                            },
+                            undefined,
+                            'sub_' + Math.random().toString(36).substring(2, 9)
+                          );
                         }
 
                         toast.success(`${optionModalProduct.name} ditambahkan`, { duration: 1000, icon: '🛒' });

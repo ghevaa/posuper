@@ -217,7 +217,7 @@ export const transactionItems = pgTable(
   {
     id: text('id').primaryKey(),
     transactionId: text('transaction_id').notNull().references(() => transactions.id, { onDelete: 'cascade' }),
-    productId: text('product_id').notNull().references(() => products.id),
+    productId: text('product_id').references(() => products.id, { onDelete: 'set null' }),
     productName: text('product_name').notNull(),
     variantId: text('variant_id'),
     variantName: text('variant_name'),

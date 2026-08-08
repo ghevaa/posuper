@@ -125,6 +125,7 @@ export async function midtransRoutes(app: FastifyInstance) {
           .where(eq(transactionItems.transactionId, tx.id));
 
         for (const item of items) {
+          if (!item.productId) continue;
           await db.update(products)
             .set({ stock: sql`${products.stock} + ${item.qty}` })
             .where(eq(products.id, item.productId));

@@ -75,6 +75,7 @@ export async function transactionRoutes(app: FastifyInstance) {
 
       // --- Stock Validation ---
       for (const item of items) {
+        if (!item.productId || item.productId.startsWith('sub_')) continue;
         const [product] = await db.select({ stock: products.stock, name: products.name })
           .from(products)
           .where(eq(products.id, item.productId))
@@ -89,10 +90,17 @@ export async function transactionRoutes(app: FastifyInstance) {
 
       // Insert items & deduct stock
       for (const item of items) {
+        // Validate if productId exists in database table
+        const validProd = item.productId && !item.productId.startsWith('sub_')
+          ? await db.select({ id: products.id }).from(products).where(eq(products.id, item.productId)).limit(1)
+          : [];
+
+        const validProductId = validProd.length > 0 ? item.productId : null;
+
         await db.insert(transactionItems).values({
           id: nanoid(),
           transactionId: txId,
-          productId: item.productId,
+          productId: validProductId,
           productName: item.productName,
           variantId: item.variantId || null,
           variantName: item.variantName || null,
@@ -102,10 +110,12 @@ export async function transactionRoutes(app: FastifyInstance) {
           note: item.note || null,
         });
 
-        // Deduct stock
-        await db.update(products)
-          .set({ stock: sql`${products.stock} - ${item.qty}` })
-          .where(eq(products.id, item.productId));
+        // Deduct stock only for existing products
+        if (validProductId) {
+          await db.update(products)
+            .set({ stock: sql`${products.stock} - ${item.qty}` })
+            .where(eq(products.id, validProductId));
+        }
       }
 
       // Insert payment record
@@ -445,6 +455,7 @@ export async function transactionRoutes(app: FastifyInstance) {
     // Restore stock
     const items = await db.select().from(transactionItems).where(eq(transactionItems.transactionId, id));
     for (const item of items) {
+      if (!item.productId) continue;
       await db.update(products)
         .set({ stock: sql`${products.stock} + ${item.qty}` })
         .where(eq(products.id, item.productId));
