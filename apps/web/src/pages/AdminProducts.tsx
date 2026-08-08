@@ -293,50 +293,66 @@ export default function AdminProducts() {
                 </div>
                 
                 {variants.length > 0 && (
-                  <div className="space-y-2 max-h-48 overflow-y-auto p-2 bg-[var(--color-surface)] rounded-lg border border-[var(--color-border)]">
+                  <div className="space-y-2 max-h-56 overflow-y-auto p-2.5 bg-[var(--color-surface)] rounded-lg border border-[var(--color-border)]">
+                    <div className="grid grid-cols-12 gap-2 text-[11px] font-semibold text-[var(--color-text-muted)] pb-1 border-b border-[var(--color-border)]">
+                      <span className="col-span-5">Nama Varian</span>
+                      <span className="col-span-3">Harga Jual (+Rp)</span>
+                      <span className="col-span-3">Harga Modal (Rp)</span>
+                      <span className="col-span-1"></span>
+                    </div>
+
                     {variants.map((v, i) => (
-                      <div key={i} className="flex gap-1.5 items-center w-full">
-                        <input
-                          placeholder="Nama Varian"
-                          className="input input-sm text-xs flex-1"
-                          value={v.name}
-                          onChange={(e) => {
-                            const newVariants = [...variants];
-                            newVariants[i].name = e.target.value;
-                            setVariants(newVariants);
-                          }}
-                          required
-                        />
-                        <input
-                          type="number"
-                          placeholder="Harga Jual"
-                          className="input input-sm text-xs w-24"
-                          value={v.additionalPrice}
-                          onChange={(e) => {
-                            const newVariants = [...variants];
-                            newVariants[i].additionalPrice = e.target.value;
-                            setVariants(newVariants);
-                          }}
-                          required
-                        />
-                        <input
-                          type="number"
-                          placeholder="Modal"
-                          className="input input-sm text-xs w-20"
-                          value={v.cost || '0'}
-                          onChange={(e) => {
-                            const newVariants = [...variants];
-                            newVariants[i].cost = e.target.value;
-                            setVariants(newVariants);
-                          }}
-                        />
-                        <button
-                          type="button"
-                          onClick={() => setVariants(variants.filter((_, idx) => idx !== i))}
-                          className="btn btn-ghost btn-icon btn-sm text-red-400 p-1 shrink-0"
-                        >
-                          <X size={14} />
-                        </button>
+                      <div key={i} className="grid grid-cols-12 gap-2 items-center w-full">
+                        <div className="col-span-5">
+                          <input
+                            placeholder="Contoh: original"
+                            className="input input-sm text-xs w-full"
+                            value={v.name}
+                            onChange={(e) => {
+                              const newVariants = [...variants];
+                              newVariants[i].name = e.target.value;
+                              setVariants(newVariants);
+                            }}
+                            required
+                          />
+                        </div>
+                        <div className="col-span-3">
+                          <input
+                            type="number"
+                            placeholder="0"
+                            className="input input-sm text-xs w-full"
+                            value={v.additionalPrice}
+                            onChange={(e) => {
+                              const newVariants = [...variants];
+                              newVariants[i].additionalPrice = e.target.value;
+                              setVariants(newVariants);
+                            }}
+                            required
+                          />
+                        </div>
+                        <div className="col-span-3">
+                          <input
+                            type="number"
+                            placeholder="0"
+                            className="input input-sm text-xs w-full"
+                            value={v.cost || '0'}
+                            onChange={(e) => {
+                              const newVariants = [...variants];
+                              newVariants[i].cost = e.target.value;
+                              setVariants(newVariants);
+                            }}
+                          />
+                        </div>
+                        <div className="col-span-1 flex justify-center">
+                          <button
+                            type="button"
+                            onClick={() => setVariants(variants.filter((_, idx) => idx !== i))}
+                            className="btn btn-ghost btn-icon btn-sm text-red-400 p-1"
+                            title="Hapus Varian"
+                          >
+                            <X size={14} />
+                          </button>
+                        </div>
                       </div>
                     ))}
                   </div>
