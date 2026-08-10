@@ -11,7 +11,7 @@ import { requireRole } from '../middleware/auth.middleware.js';
 import { createAuditLog } from '../middleware/logger.middleware.js';
 
 export async function expenseRoutes(app: FastifyInstance) {
-  app.get('/api/expenses', { preHandler: [requireRole('developer', 'admin')] }, async (req, reply) => {
+  app.get('/api/expenses', { preHandler: [requireRole('developer', 'admin', 'cashier')] }, async (req, reply) => {
     const { from, to } = req.query as any;
     let conditions: any[] = [];
     if (from) conditions.push(gte(expenses.date, new Date(from)));
@@ -23,7 +23,7 @@ export async function expenseRoutes(app: FastifyInstance) {
     return reply.send({ success: true, data: all });
   });
 
-  app.post('/api/expenses', { preHandler: [requireRole('developer', 'admin')] }, async (req, reply) => {
+  app.post('/api/expenses', { preHandler: [requireRole('developer', 'admin', 'cashier')] }, async (req, reply) => {
     const body = req.body as any;
     const currentUser = (req as any).user;
     const id = nanoid();

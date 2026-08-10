@@ -17,6 +17,7 @@ const cashierLinks = [
   { to: '/pos', icon: ShoppingCart, label: 'POS' },
   { to: '/pos/history', icon: Clock, label: 'Riwayat Hari Ini' },
   { to: '/admin/transactions', icon: Receipt, label: 'Riwayat Transaksi' },
+  { to: '/admin/expenses', icon: DollarSign, label: 'Pengeluaran' },
   { to: '/admin/stock-opname', icon: ClipboardList, label: 'Stok Opname' },
   { to: '/pos/settings', icon: Settings, label: 'Pengaturan Printer' },
 ];
@@ -148,7 +149,7 @@ export default function DashboardLayout() {
               <p className="text-sm font-medium truncate">{user?.name}</p>
               <p className="text-[11px] text-[var(--color-text-dim)] truncate flex items-center justify-between">
                 <span className="truncate">{user?.email}</span>
-                <span className="text-[9px] bg-[var(--color-surface-lighter)] text-[var(--color-text-dim)] px-1 rounded font-mono shrink-0 ml-1">v0.1.56</span>
+                <span className="text-[9px] bg-[var(--color-surface-lighter)] text-[var(--color-text-dim)] px-1 rounded font-mono shrink-0 ml-1">v0.1.57</span>
               </p>
             </div>
           </div>

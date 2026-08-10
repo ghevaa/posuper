@@ -8,6 +8,7 @@ import { api } from '../lib/api';
 import { formatCurrency, formatDate } from '../lib/utils';
 import { Plus, Trash2, X, Loader2, Download } from 'lucide-react';
 import toast from 'react-hot-toast';
+import { useAuthStore } from '../stores/auth.store';
 
 interface Expense {
   id: string;
@@ -19,6 +20,9 @@ interface Expense {
 }
 
 export default function AdminExpenses() {
+  const { user } = useAuthStore();
+  const canDelete = user?.role === 'admin' || user?.role === 'developer';
+
   const [showForm, setShowForm] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [form, setForm] = useState({ description: '', amount: '', date: new Date().toISOString().split('T')[0] });
@@ -104,27 +108,34 @@ export default function AdminExpenses() {
       <div className="table-container">
         <table>
           <thead>
-            <tr><th>Tanggal</th><th>Deskripsi</th><th>Jumlah</th><th>Aksi</th></tr>
+            <tr>
+              <th>Tanggal</th>
+              <th>Deskripsi</th>
+              <th>Jumlah</th>
+              {canDelete && <th>Aksi</th>}
+            </tr>
           </thead>
           <tbody>
             {isLoading ? (
-              <tr><td colSpan={4} className="text-center py-8"><div className="spinner mx-auto" /></td></tr>
+              <tr><td colSpan={canDelete ? 4 : 3} className="text-center py-8"><div className="spinner mx-auto" /></td></tr>
             ) : expenses.length === 0 ? (
-              <tr><td colSpan={4} className="text-center py-8 text-[var(--color-text-dim)]">Belum ada pengeluaran</td></tr>
+              <tr><td colSpan={canDelete ? 4 : 3} className="text-center py-8 text-[var(--color-text-dim)]">Belum ada pengeluaran</td></tr>
             ) : (
               expenses.map((e) => (
                 <tr key={e.id}>
                   <td>{formatDate(e.date)}</td>
                   <td className="font-medium">{e.description}</td>
                   <td className="text-red-400 font-semibold">{formatCurrency(Number(e.amount))}</td>
-                  <td>
-                    <button
-                      onClick={() => { if (confirm('Hapus catatan ini?')) deleteMutation.mutate(e.id); }}
-                      className="btn btn-ghost btn-icon btn-sm text-red-400"
-                    >
-                      <Trash2 size={14} />
-                    </button>
-                  </td>
+                  {canDelete && (
+                    <td>
+                      <button
+                        onClick={() => { if (confirm('Hapus catatan ini?')) deleteMutation.mutate(e.id); }}
+                        className="btn btn-ghost btn-icon btn-sm text-red-400"
+                      >
+                        <Trash2 size={14} />
+                      </button>
+                    </td>
+                  )}
                 </tr>
               ))
             )}
