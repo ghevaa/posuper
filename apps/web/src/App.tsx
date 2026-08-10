@@ -124,7 +124,7 @@ export default function App() {
           <Route
             path="admin/transactions"
             element={
-              <ProtectedRoute allowedRoles={['admin', 'developer']}>
+              <ProtectedRoute allowedRoles={['cashier', 'admin', 'developer']}>
                 <AdminTransactions />
               </ProtectedRoute>
             }
@@ -140,7 +140,7 @@ export default function App() {
           <Route
             path="admin/stock-opname"
             element={
-              <ProtectedRoute allowedRoles={['admin', 'developer']}>
+              <ProtectedRoute allowedRoles={['cashier', 'admin', 'developer']}>
                 <AdminStockOpname />
               </ProtectedRoute>
             }

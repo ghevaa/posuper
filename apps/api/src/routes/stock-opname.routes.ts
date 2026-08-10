@@ -20,7 +20,7 @@ function sumEntries(entries: StockInEntry[] | null | undefined): number {
 
 export async function stockOpnameRoutes(app: FastifyInstance) {
   // ─── List / Create Stock Opname Categories ─────────────────
-  app.get('/api/stock-opname/categories', { preHandler: [requireRole('developer', 'admin')] }, async (_req, reply) => {
+  app.get('/api/stock-opname/categories', { preHandler: [requireRole('developer', 'admin', 'cashier')] }, async (_req, reply) => {
     const cats = await db.select().from(stockOpnameCategories).orderBy(asc(stockOpnameCategories.sortOrder), asc(stockOpnameCategories.name));
     return reply.send({ success: true, data: cats });
   });
@@ -109,7 +109,7 @@ export async function stockOpnameRoutes(app: FastifyInstance) {
   });
 
   // ─── List all sessions ─────────────────────────────────────
-  app.get('/api/stock-opname', { preHandler: [requireRole('developer', 'admin')] }, async (req, reply) => {
+  app.get('/api/stock-opname', { preHandler: [requireRole('developer', 'admin', 'cashier')] }, async (req, reply) => {
     const sessions = await db.query.stockOpnameSessions.findMany({
       orderBy: [desc(stockOpnameSessions.date)],
       with: {
@@ -128,7 +128,7 @@ export async function stockOpnameRoutes(app: FastifyInstance) {
   });
 
   // ─── Get session detail ────────────────────────────────────
-  app.get('/api/stock-opname/:id', { preHandler: [requireRole('developer', 'admin')] }, async (req, reply) => {
+  app.get('/api/stock-opname/:id', { preHandler: [requireRole('developer', 'admin', 'cashier')] }, async (req, reply) => {
     const { id } = req.params as { id: string };
 
     const session = await db.query.stockOpnameSessions.findFirst({
@@ -274,7 +274,7 @@ export async function stockOpnameRoutes(app: FastifyInstance) {
   });
 
   // ─── Export to Excel ───────────────────────────────────────
-  app.get('/api/stock-opname/:id/export', { preHandler: [requireRole('developer', 'admin')] }, async (req, reply) => {
+  app.get('/api/stock-opname/:id/export', { preHandler: [requireRole('developer', 'admin', 'cashier')] }, async (req, reply) => {
     const { id } = req.params as { id: string };
 
     const session = await db.query.stockOpnameSessions.findFirst({

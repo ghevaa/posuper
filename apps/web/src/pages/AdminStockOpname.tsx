@@ -8,6 +8,7 @@ import { api } from '../lib/api';
 import { formatDate } from '../lib/utils';
 import { Plus, Trash2, X, Loader2, Download, Save, ChevronLeft, ClipboardList, CalendarPlus, Tag } from 'lucide-react';
 import toast from 'react-hot-toast';
+import { useAuthStore } from '../stores/auth.store';
 
 interface StockInEntry {
   date: string; // yyyy-mm-dd
@@ -53,6 +54,9 @@ function sumEntries(entries: StockInEntry[] | undefined | null): number {
 
 export default function AdminStockOpname() {
   const qc = useQueryClient();
+  const { user } = useAuthStore();
+  const isReadOnly = user?.role === 'cashier';
+
   const [showCreate, setShowCreate] = useState(false);
   const [createForm, setCreateForm] = useState({ name: '', date: new Date().toISOString().slice(0, 10), notes: '' });
   const [selectedSession, setSelectedSession] = useState<string | null>(null);
@@ -271,16 +275,20 @@ export default function AdminStockOpname() {
             </div>
           </div>
           <div className="flex gap-2">
-            <button onClick={() => setShowAddItem(true)} className="btn btn-secondary">
-              <Plus size={16} /> Tambah Bahan
-            </button>
+            {!isReadOnly && (
+              <button onClick={() => setShowAddItem(true)} className="btn btn-secondary">
+                <Plus size={16} /> Tambah Bahan
+              </button>
+            )}
             <button onClick={() => handleExport(selectedSession)} className="btn btn-secondary">
               <Download size={16} /> Export Excel
             </button>
-            <button onClick={handleSaveItems} disabled={saving} className="btn btn-primary">
-              {saving ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />}
-              Simpan
-            </button>
+            {!isReadOnly && (
+              <button onClick={handleSaveItems} disabled={saving} className="btn btn-primary">
+                {saving ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />}
+                Simpan
+              </button>
+            )}
           </div>
         </div>
 
@@ -289,7 +297,7 @@ export default function AdminStockOpname() {
         ) : editItems.length === 0 ? (
           <div className="glass-card p-8 text-center text-[var(--color-text-dim)]">
             <ClipboardList size={40} className="mx-auto mb-2 opacity-30" />
-            Tidak ada item. Klik "Tambah Bahan" untuk mulai mencatat.
+            Tidak ada item. {isReadOnly ? '' : 'Klik "Tambah Bahan" untuk mulai mencatat.'}
           </div>
         ) : (
           <div className="space-y-5">
@@ -312,7 +320,7 @@ export default function AdminStockOpname() {
                       <th style={{ width: '80px' }}>Terpakai</th>
                       <th style={{ width: '80px' }}>Selisih</th>
                       <th style={{ width: '130px' }}>Keterangan / Rusak</th>
-                      <th style={{ width: '36px' }}></th>
+                      {!isReadOnly && <th style={{ width: '36px' }}></th>}
                     </tr>
                   </thead>
                   <tbody>
@@ -323,85 +331,107 @@ export default function AdminStockOpname() {
                           <td className="text-center text-[var(--color-text-dim)]">{i + 1}</td>
                           <td className="font-medium">{item.productName}</td>
                           <td>
-                            <select
-                              className="input text-xs p-1"
-                              value={item.categoryId || ''}
-                              onChange={(e) => updateItem(idx, 'categoryId', e.target.value || null)}
-                            >
-                              <option value="">Tanpa Kategori</option>
-                              {categories.map((c) => (
-                                <option key={c.id} value={c.id}>{c.name}</option>
-                              ))}
-                            </select>
+                            {isReadOnly ? (
+                              <span className="text-xs text-[var(--color-text-muted)]">
+                                {item.categoryId ? categoryNameMap.get(item.categoryId) || '-' : 'Tanpa Kategori'}
+                              </span>
+                            ) : (
+                              <select
+                                className="input text-xs p-1"
+                                value={item.categoryId || ''}
+                                onChange={(e) => updateItem(idx, 'categoryId', e.target.value || null)}
+                              >
+                                <option value="">Tanpa Kategori</option>
+                                {categories.map((c) => (
+                                  <option key={c.id} value={c.id}>{c.name}</option>
+                                ))}
+                              </select>
+                            )}
                           </td>
                           <td>
-                            <input
-                              className="input text-xs text-center p-1"
-                              style={{ width: '55px' }}
-                              value={item.unit}
-                              onChange={(e) => updateItem(idx, 'unit', e.target.value)}
-                            />
+                            {isReadOnly ? (
+                              <span className="text-xs text-center block font-medium">{item.unit}</span>
+                            ) : (
+                              <input
+                                className="input text-xs text-center p-1"
+                                style={{ width: '55px' }}
+                                value={item.unit}
+                                onChange={(e) => updateItem(idx, 'unit', e.target.value)}
+                              />
+                            )}
                           </td>
                           <td>
-                            <input
-                              type="number"
-                              className="input text-xs text-center p-1"
-                              style={{ width: '75px' }}
-                              value={item.stockStart}
-                              onChange={(e) => updateItem(idx, 'stockStart', Number(e.target.value) || 0)}
-                            />
+                            {isReadOnly ? (
+                              <span className="text-xs text-center block font-semibold">{item.stockStart}</span>
+                            ) : (
+                              <input
+                                type="number"
+                                className="input text-xs text-center p-1"
+                                style={{ width: '75px' }}
+                                value={item.stockStart}
+                                onChange={(e) => updateItem(idx, 'stockStart', Number(e.target.value) || 0)}
+                              />
+                            )}
                           </td>
                           <td>
                             <div className="flex flex-wrap items-center gap-1">
                               {(item.stockInEntries || []).map((entry) => (
                                 <span key={entry.date} className="inline-flex items-center gap-1 text-xs font-semibold px-2 py-0.5 rounded-md bg-cyan-950/80 text-cyan-300 border border-cyan-500/40 shadow-sm">
                                   {new Date(entry.date).getDate()}/{new Date(entry.date).getMonth() + 1}: <span className="font-bold text-white">{entry.qty}</span>
-                                  <button onClick={() => removeStockInEntry(idx, entry.date)} className="text-cyan-400 hover:text-red-400 ml-0.5 transition-colors">
-                                    <X size={12} />
-                                  </button>
+                                  {!isReadOnly && (
+                                    <button onClick={() => removeStockInEntry(idx, entry.date)} className="text-cyan-400 hover:text-red-400 ml-0.5 transition-colors">
+                                      <X size={12} />
+                                    </button>
+                                  )}
                                 </span>
                               ))}
-                              <div className="relative">
-                                <button
-                                  onClick={() => { setStockInPopover(stockInPopover === item.id ? null : item.id); setStockInDraft({ date: new Date().toISOString().slice(0, 10), qty: '' }); }}
-                                  className="btn btn-ghost btn-icon btn-sm"
-                                  title="Tambah tanggal barang masuk"
-                                >
-                                  <CalendarPlus size={14} />
-                                </button>
-                                {stockInPopover === item.id && (
-                                  <div className="absolute z-10 top-full left-0 mt-1 p-2 rounded shadow-lg glass-card space-y-2" style={{ minWidth: '190px' }}>
-                                    <input
-                                      type="date"
-                                      className="input text-xs p-1 w-full"
-                                      value={stockInDraft.date}
-                                      onChange={(e) => setStockInDraft({ ...stockInDraft, date: e.target.value })}
-                                    />
-                                    <input
-                                      type="number"
-                                      placeholder="Qty"
-                                      className="input text-xs p-1 w-full"
-                                      value={stockInDraft.qty}
-                                      onChange={(e) => setStockInDraft({ ...stockInDraft, qty: e.target.value })}
-                                    />
-                                    <div className="flex gap-1">
-                                      <button onClick={() => addStockInEntry(idx)} className="btn btn-primary btn-sm flex-1">Tambah</button>
-                                      <button onClick={() => setStockInPopover(null)} className="btn btn-ghost btn-sm">Batal</button>
+                              {!isReadOnly && (
+                                <div className="relative">
+                                  <button
+                                    onClick={() => { setStockInPopover(stockInPopover === item.id ? null : item.id); setStockInDraft({ date: new Date().toISOString().slice(0, 10), qty: '' }); }}
+                                    className="btn btn-ghost btn-icon btn-sm"
+                                    title="Tambah tanggal barang masuk"
+                                  >
+                                    <CalendarPlus size={14} />
+                                  </button>
+                                  {stockInPopover === item.id && (
+                                    <div className="absolute z-10 top-full left-0 mt-1 p-2 rounded shadow-lg glass-card space-y-2" style={{ minWidth: '190px' }}>
+                                      <input
+                                        type="date"
+                                        className="input text-xs p-1 w-full"
+                                        value={stockInDraft.date}
+                                        onChange={(e) => setStockInDraft({ ...stockInDraft, date: e.target.value })}
+                                      />
+                                      <input
+                                        type="number"
+                                        placeholder="Qty"
+                                        className="input text-xs p-1 w-full"
+                                        value={stockInDraft.qty}
+                                        onChange={(e) => setStockInDraft({ ...stockInDraft, qty: e.target.value })}
+                                      />
+                                      <div className="flex gap-1">
+                                        <button onClick={() => addStockInEntry(idx)} className="btn btn-primary btn-sm flex-1">Tambah</button>
+                                        <button onClick={() => setStockInPopover(null)} className="btn btn-ghost btn-sm">Batal</button>
+                                      </div>
                                     </div>
-                                  </div>
-                                )}
-                              </div>
+                                  )}
+                                </div>
+                              )}
                             </div>
                           </td>
                           <td className="text-center font-medium">{totalStock}</td>
                           <td>
-                            <input
-                              type="number"
-                              className="input text-xs text-center p-1"
-                              style={{ width: '85px' }}
-                              value={item.stockReal}
-                              onChange={(e) => updateItem(idx, 'stockReal', Number(e.target.value) || 0)}
-                            />
+                            {isReadOnly ? (
+                              <span className="text-xs text-center block font-bold text-slate-800 dark:text-slate-100">{item.stockReal}</span>
+                            ) : (
+                              <input
+                                type="number"
+                                className="input text-xs text-center p-1"
+                                style={{ width: '85px' }}
+                                value={item.stockReal}
+                                onChange={(e) => updateItem(idx, 'stockReal', Number(e.target.value) || 0)}
+                              />
+                            )}
                           </td>
                           <td className="text-center">
                             <span className={`font-semibold ${item.usage > 0 ? 'text-orange-400' : item.usage < 0 ? 'text-red-400' : ''}`}>
@@ -419,22 +449,28 @@ export default function AdminStockOpname() {
                             })()}
                           </td>
                           <td>
-                            <input
-                              className="input text-xs p-1"
-                              style={{ width: '120px' }}
-                              placeholder="waste / catatan"
-                              value={item.notes || ''}
-                              onChange={(e) => updateItem(idx, 'notes', e.target.value)}
-                            />
+                            {isReadOnly ? (
+                              <span className="text-xs text-[var(--color-text-muted)] truncate block" style={{ maxWidth: '120px' }}>{item.notes || '-'}</span>
+                            ) : (
+                              <input
+                                className="input text-xs p-1"
+                                style={{ width: '120px' }}
+                                placeholder="waste / catatan"
+                                value={item.notes || ''}
+                                onChange={(e) => updateItem(idx, 'notes', e.target.value)}
+                              />
+                            )}
                           </td>
-                          <td>
-                            <button
-                              onClick={() => { if (confirm(`Hapus "${item.productName}"?`)) deleteItemMutation.mutate(item.id); }}
-                              className="btn btn-ghost btn-icon btn-sm text-red-400"
-                            >
-                              <Trash2 size={14} />
-                            </button>
-                          </td>
+                          {!isReadOnly && (
+                            <td>
+                              <button
+                                onClick={() => { if (confirm(`Hapus "${item.productName}"?`)) deleteItemMutation.mutate(item.id); }}
+                                className="btn btn-ghost btn-icon btn-sm text-red-400"
+                              >
+                                <Trash2 size={14} />
+                              </button>
+                            </td>
+                          )}
                         </tr>
                       );
                     })}
@@ -552,9 +588,11 @@ export default function AdminStockOpname() {
           <h1 className="text-2xl font-bold">Stok Opname</h1>
           <p className="text-sm text-[var(--color-text-muted)]">Pencatatan stok harian & penghitungan pemakaian</p>
         </div>
-        <button onClick={() => setShowCreate(true)} className="btn btn-primary">
-          <Plus size={18} /> Buat Stok Opname
-        </button>
+        {!isReadOnly && (
+          <button onClick={() => setShowCreate(true)} className="btn btn-primary">
+            <Plus size={18} /> Buat Stok Opname
+          </button>
+        )}
       </div>
 
       <div className="table-container">
@@ -573,7 +611,7 @@ export default function AdminStockOpname() {
             ) : sessions.length === 0 ? (
               <tr><td colSpan={4} className="text-center py-8 text-[var(--color-text-dim)]">
                 <ClipboardList size={40} className="mx-auto mb-2 opacity-30" />
-                Belum ada stok opname. Klik "Buat Stok Opname" untuk memulai.
+                Belum ada stok opname. {isReadOnly ? '' : 'Klik "Buat Stok Opname" untuk memulai.'}
               </td></tr>
             ) : (
               sessions.map((s) => (
@@ -587,7 +625,9 @@ export default function AdminStockOpname() {
                       <button onClick={() => handleExport(s.id)} className="btn btn-secondary btn-sm flex items-center gap-1.5" title="Export ke Excel">
                         <Download size={14} /> Export Excel
                       </button>
-                      <button onClick={() => { if (confirm('Hapus stok opname ini?')) deleteMutation.mutate(s.id); }} className="btn btn-ghost btn-icon btn-sm text-red-400" title="Hapus"><Trash2 size={14} /></button>
+                      {!isReadOnly && (
+                        <button onClick={() => { if (confirm('Hapus stok opname ini?')) deleteMutation.mutate(s.id); }} className="btn btn-ghost btn-icon btn-sm text-red-400" title="Hapus"><Trash2 size={14} /></button>
+                      )}
                     </div>
                   </td>
                 </tr>
