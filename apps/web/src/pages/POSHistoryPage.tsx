@@ -16,7 +16,8 @@ interface TransactionItem {
   transactionId: string;
   productId: string;
   productName: string;
-  quantity: number;
+  qty?: number;
+  quantity?: number;
   price: number;
   subtotal: number;
   note?: string;
@@ -534,7 +535,7 @@ export default function POSHistoryPage() {
                             <p className="font-medium">{item.productName}</p>
                             {item.note && <p className="text-xs text-slate-500 italic">{item.note}</p>}
                           </td>
-                          <td className="px-4 py-2 text-center">{item.quantity}</td>
+                          <td className="px-4 py-2 text-center font-bold">{item.qty ?? item.quantity ?? 1}</td>
                           <td className="px-4 py-2 text-right">{formatCurrency(item.price)}</td>
                           <td className="px-4 py-2 text-right font-medium">{formatCurrency(item.subtotal)}</td>
                         </tr>

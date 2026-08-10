@@ -16,7 +16,8 @@ interface TransactionItem {
   productId: string;
   productName: string;
   variantName?: string;
-  quantity: number;
+  qty?: number;
+  quantity?: number;
   price: number;
   subtotal: number;
 }
@@ -536,7 +537,7 @@ export default function AdminTransactions() {
                                 {item.variantName && <div className="text-xs text-[var(--color-text-secondary)]">{item.variantName}</div>}
                               </td>
                               <td className="py-2 text-right">{formatCurrency(item.price)}</td>
-                              <td className="py-2 text-center">{item.quantity}</td>
+                              <td className="py-2 text-center font-bold">{item.qty ?? item.quantity ?? 1}</td>
                               <td className="py-2 text-right font-medium">{formatCurrency(item.subtotal)}</td>
                             </tr>
                           ))}
