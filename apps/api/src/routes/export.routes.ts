@@ -8,7 +8,7 @@ import {
   transactions, transactionItems, user, expenses,
   products, categories, productVariants, categoryOptionGroups, categoryOptions
 } from '../db/schema.js';
-import { eq, gte, lte, and, desc } from 'drizzle-orm';
+import { eq, gte, lte, and, desc, ilike } from 'drizzle-orm';
 import { requireRole } from '../middleware/auth.middleware.js';
 import ExcelJS from 'exceljs';
 
@@ -41,12 +41,64 @@ export async function exportRoutes(app: FastifyInstance) {
   };
 
   // ─── 1. Export Transactions ─────────────────────────────────
-  app.get('/api/export/transactions', { preHandler: [requireRole('developer', 'admin')] }, async (req, reply) => {
-    const { from, to } = req.query as { from?: string; to?: string };
+  // Helper: date range for export
+  function getExportDateRange(dateFilter: string, from?: string, to?: string): { start?: Date; end?: Date } {
+    const now = new Date();
+    const startOfDay = (d: Date) => { d.setHours(0, 0, 0, 0); return d; };
+    const endOfDay = (d: Date) => { d.setHours(23, 59, 59, 999); return d; };
+
+    switch (dateFilter) {
+      case 'today':
+        return { start: startOfDay(new Date(now)), end: endOfDay(new Date(now)) };
+      case 'yesterday': {
+        const y = new Date(now); y.setDate(y.getDate() - 1);
+        return { start: startOfDay(y), end: endOfDay(new Date(y)) };
+      }
+      case 'this_week': {
+        const d = new Date(now); d.setDate(d.getDate() - d.getDay());
+        return { start: startOfDay(d), end: endOfDay(new Date(now)) };
+      }
+      case 'last_week': {
+        const d = new Date(now); d.setDate(d.getDate() - d.getDay() - 7);
+        const e = new Date(d); e.setDate(e.getDate() + 6);
+        return { start: startOfDay(d), end: endOfDay(e) };
+      }
+      case 'this_month': {
+        const d = new Date(now.getFullYear(), now.getMonth(), 1);
+        return { start: startOfDay(d), end: endOfDay(new Date(now)) };
+      }
+      case 'last_month': {
+        const d = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+        const e = new Date(now.getFullYear(), now.getMonth(), 0);
+        return { start: startOfDay(d), end: endOfDay(e) };
+      }
+      case 'custom':
+        return {
+          start: from ? new Date(`${from}T00:00:00`) : undefined,
+          end: to ? new Date(`${to}T23:59:59`) : undefined,
+        };
+      default:
+        return {
+          start: from ? new Date(`${from}T00:00:00`) : undefined,
+          end: to ? new Date(`${to}T23:59:59`) : undefined,
+        };
+    }
+  }
+
+  // ─── 1. Export Transactions ─────────────────────────────────
+  app.get('/api/export/transactions', { preHandler: [requireRole('developer', 'admin', 'cashier')] }, async (req, reply) => {
+    const { dateFilter, from, to, status, orderType, paymentMethod, userId, invoiceNo } = req.query as any;
 
     const dateConditions: any[] = [];
-    if (from) dateConditions.push(gte(transactions.createdAt, new Date(`${from}T00:00:00`)));
-    if (to) dateConditions.push(lte(transactions.createdAt, new Date(`${to}T23:59:59`)));
+    const range = getExportDateRange(dateFilter || '', from, to);
+    if (range.start) dateConditions.push(gte(transactions.createdAt, range.start));
+    if (range.end) dateConditions.push(lte(transactions.createdAt, range.end));
+    if (status && status !== 'all') dateConditions.push(eq(transactions.status, status));
+    if (orderType && orderType !== 'all') dateConditions.push(eq(transactions.orderType, orderType));
+    if (paymentMethod && paymentMethod !== 'all') dateConditions.push(eq(transactions.paymentMethod, paymentMethod));
+    if (userId && userId !== 'all') dateConditions.push(eq(transactions.userId, userId));
+    if (invoiceNo) dateConditions.push(ilike(transactions.invoiceNo, `%${invoiceNo}%`));
+
     const whereClause = dateConditions.length > 0 ? and(...dateConditions) : undefined;
 
     // Fetch transactions
@@ -68,7 +120,7 @@ export async function exportRoutes(app: FastifyInstance) {
       .where(whereClause)
       .orderBy(desc(transactions.createdAt));
 
-    // Fetch transaction items with details
+    // Fetch transaction items with details including variant cost
     const txIds = txList.map((t) => t.id);
     let itemsList: any[] = [];
     const itemsByTx: Record<string, any[]> = {};
@@ -86,10 +138,12 @@ export async function exportRoutes(app: FastifyInstance) {
         subtotal: transactionItems.subtotal,
         note: transactionItems.note,
         productCost: products.cost,
+        variantCost: productVariants.cost,
       })
         .from(transactionItems)
         .leftJoin(transactions, eq(transactionItems.transactionId, transactions.id))
         .leftJoin(products, eq(transactionItems.productId, products.id))
+        .leftJoin(productVariants, eq(transactionItems.variantId, productVariants.id))
         .where(whereClause)
         .orderBy(desc(transactions.createdAt));
 
@@ -285,7 +339,7 @@ export async function exportRoutes(app: FastifyInstance) {
       const d = it.createdAt ? new Date(it.createdAt) : new Date();
       const qtyVal = Number(it.qty) || 0;
       const priceVal = Number(it.price) || 0;
-      const costVal = Number(it.productCost) || 0;
+      const costVal = Number(it.variantCost && Number(it.variantCost) > 0 ? it.variantCost : it.productCost) || 0;
       const subtotalVal = Number(it.subtotal) || (qtyVal * priceVal);
       const totalCostVal = qtyVal * costVal;
       const marginVal = subtotalVal - totalCostVal;

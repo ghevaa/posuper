@@ -204,12 +204,19 @@ export default function AdminTransactions() {
   const handleExport = async () => {
     try {
       const queryParams: string[] = [];
-      if (dateFilter === 'custom') {
-        if (fromDate) queryParams.push(`from=${fromDate}`);
-        if (toDate) queryParams.push(`to=${toDate}`);
-      } else if (dateFilter !== 'all') {
+      if (dateFilter !== 'all') {
         queryParams.push(`dateFilter=${dateFilter}`);
+        if (dateFilter === 'custom') {
+          if (fromDate) queryParams.push(`from=${fromDate}`);
+          if (toDate) queryParams.push(`to=${toDate}`);
+        }
       }
+      if (status !== 'all') queryParams.push(`status=${status}`);
+      if (orderType !== 'all') queryParams.push(`orderType=${orderType}`);
+      if (paymentMethod !== 'all') queryParams.push(`paymentMethod=${paymentMethod}`);
+      if (userIdFilter !== 'all') queryParams.push(`userId=${userIdFilter}`);
+      if (invoiceNo) queryParams.push(`invoiceNo=${encodeURIComponent(invoiceNo)}`);
+
       const url = queryParams.length > 0 ? `/export/transactions?${queryParams.join('&')}` : '/export/transactions';
       await api.downloadFile(url, 'transaksi-export.xlsx');
       toast.success('Berhasil mengunduh laporan transaksi');

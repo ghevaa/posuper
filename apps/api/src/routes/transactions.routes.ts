@@ -131,20 +131,63 @@ export async function transactionRoutes(app: FastifyInstance) {
       let snapRedirectUrl: string | null = null;
 
       if (paymentMethod === 'qris') {
+        const grossAmount = Math.round(total);
+        if (grossAmount <= 0) {
+          await db.delete(transactionItems).where(eq(transactionItems.transactionId, txId));
+          await db.delete(transactions).where(eq(transactions.id, txId));
+          return reply.status(400).send({
+            success: false,
+            error: 'Total tagihan QRIS harus lebih dari Rp 0',
+          });
+        }
+
         try {
           const midtransOrderId = `QRIS-${txId}`;
-          const parameter = {
+
+          const itemDetails: any[] = items.map((item: any, idx: number) => ({
+            id: String(item.productId || `item_${idx + 1}`).substring(0, 50),
+            name: String(item.productName || 'Item').substring(0, 50),
+            price: Math.round(item.price),
+            quantity: Number(item.qty) || 1,
+          }));
+
+          if (discount > 0) {
+            itemDetails.push({
+              id: 'DISCOUNT',
+              name: 'Diskon Transaksi',
+              price: -Math.round(discount),
+              quantity: 1,
+            });
+          }
+
+          // Check if sum of item_details matches gross_amount
+          const sumItems = itemDetails.reduce((s, it) => s + (it.price * it.quantity), 0);
+          let finalItemDetails: any[] | undefined = itemDetails;
+
+          if (sumItems !== grossAmount) {
+            const diff = grossAmount - sumItems;
+            if (Math.abs(diff) <= 100) {
+              itemDetails.push({
+                id: 'ADJUSTMENT',
+                name: 'Penyesuaian Total',
+                price: diff,
+                quantity: 1,
+              });
+            } else {
+              finalItemDetails = undefined;
+            }
+          }
+
+          const parameter: any = {
             transaction_details: {
               order_id: midtransOrderId,
-              gross_amount: Math.round(total),
+              gross_amount: grossAmount,
             },
-            item_details: items.map((item: any) => ({
-              id: item.productId,
-              name: item.productName,
-              price: Math.round(item.price),
-              quantity: item.qty,
-            })),
           };
+
+          if (finalItemDetails) {
+            parameter.item_details = finalItemDetails;
+          }
 
           const midtransTransaction = await snap.createTransaction(parameter);
           snapToken = midtransTransaction.token;
@@ -162,10 +205,12 @@ export async function transactionRoutes(app: FastifyInstance) {
           // Rollback: delete the transaction since payment setup failed
           await db.delete(transactionItems).where(eq(transactionItems.transactionId, txId));
           await db.delete(transactions).where(eq(transactions.id, txId));
-          return reply.status(500).send({
+
+          const msg = err.ApiResponse?.error_messages?.join(', ') || err.message || 'Gagal membuat QRIS';
+          return reply.status(400).send({
             success: false,
-            error: 'Failed to create QRIS payment',
-            detail: err.message,
+            error: `Gagal membuat pembayaran QRIS: ${msg}`,
+            detail: msg,
           });
         }
       }
