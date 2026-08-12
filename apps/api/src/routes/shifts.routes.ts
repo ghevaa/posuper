@@ -5,7 +5,7 @@
 import type { FastifyInstance } from 'fastify';
 import { db } from '../db/index.js';
 import { cashShifts, transactions, expenses, user } from '../db/schema.js';
-import { eq, and, gte, lte, desc, sql } from 'drizzle-orm';
+import { eq, and, or, gte, lte, desc, sql } from 'drizzle-orm';
 import { nanoid } from 'nanoid';
 import { requireAuth } from '../middleware/auth.middleware.js';
 import { createAuditLog } from '../middleware/logger.middleware.js';
@@ -71,8 +71,10 @@ export async function shiftRoutes(app: FastifyInstance) {
     // Query expenses during shift
     const exp = await db.select().from(expenses)
       .where(and(
-        gte(expenses.date, startedAt),
-        lte(expenses.date, endedAt),
+        or(
+          and(gte(expenses.date, startedAt), lte(expenses.date, endedAt)),
+          and(gte(expenses.createdAt, startedAt), lte(expenses.createdAt, endedAt))
+        ),
         activeShift ? eq(expenses.userId, activeShift.userId) : sql`1=1`
       ));
 
@@ -151,8 +153,10 @@ export async function shiftRoutes(app: FastifyInstance) {
     // Sum expenses during shift
     const exp = await db.select().from(expenses)
       .where(and(
-        gte(expenses.date, currentShift.startedAt),
-        lte(expenses.date, endedAt),
+        or(
+          and(gte(expenses.date, currentShift.startedAt), lte(expenses.date, endedAt)),
+          and(gte(expenses.createdAt, currentShift.startedAt), lte(expenses.createdAt, endedAt))
+        ),
         eq(expenses.userId, currentShift.userId)
       ));
 

@@ -68,10 +68,16 @@ export default function AdminExpenses() {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    const now = new Date();
+    const todayStr = now.toISOString().split('T')[0];
+    let expenseDate = new Date(form.date);
+    if (form.date === todayStr) {
+      expenseDate = now;
+    }
     createMutation.mutate({
       description: form.description,
       amount: Number(form.amount),
-      date: new Date(form.date).toISOString(),
+      date: expenseDate.toISOString(),
     });
   };
 

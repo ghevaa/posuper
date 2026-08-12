@@ -28,11 +28,17 @@ export async function expenseRoutes(app: FastifyInstance) {
     const currentUser = (req as any).user;
     const id = nanoid();
 
+    let expenseDate = body.date ? new Date(body.date) : new Date();
+    const now = new Date();
+    if (typeof body.date === 'string' && body.date.startsWith(now.toISOString().split('T')[0]) && expenseDate.getUTCHours() === 0 && expenseDate.getUTCMinutes() === 0) {
+      expenseDate = new Date();
+    }
+
     await db.insert(expenses).values({
       id,
       description: body.description,
       amount: String(body.amount),
-      date: new Date(body.date || Date.now()),
+      date: expenseDate,
       userId: currentUser.id,
     });
 
