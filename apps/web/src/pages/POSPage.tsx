@@ -580,7 +580,21 @@ export default function POSPage() {
                   <div>
                     <div className="w-full h-20 sm:h-24 rounded-lg bg-[var(--color-surface)] mb-2 flex items-center justify-center text-3xl group-hover:scale-105 transition-transform overflow-hidden relative">
                       {product.image ? (
-                        <img src={getProductImageUrl(product.image)} alt={product.name} className="w-full h-full object-cover rounded-lg" />
+                        <img
+                          src={getProductImageUrl(product.image)}
+                          alt={product.name}
+                          className="w-full h-full object-cover rounded-lg"
+                          onError={(e) => {
+                            (e.target as HTMLImageElement).style.display = 'none';
+                            const parent = (e.target as HTMLElement).parentElement;
+                            if (parent && !parent.querySelector('.fallback-icon')) {
+                              const span = document.createElement('span');
+                              span.className = 'fallback-icon text-3xl';
+                              span.textContent = '📦';
+                              parent.appendChild(span);
+                            }
+                          }}
+                        />
                       ) : '📦'}
                       {isOutOfStock && (
                         <div className="absolute inset-0 bg-black/60 flex items-center justify-center rounded-lg">

@@ -209,9 +209,23 @@ export default function AdminProducts() {
                 <tr key={p.id}>
                   <td className="font-medium">
                     <div className="flex items-center gap-3">
-                      <div className="w-8 h-8 rounded bg-[var(--color-surface)] flex items-center justify-center text-base overflow-hidden border border-[var(--color-border)] shrink-0">
+                      <div className="w-8 h-8 rounded bg-[var(--color-surface)] flex items-center justify-center text-base overflow-hidden border border-[var(--color-border)] shrink-0 relative">
                         {p.image ? (
-                          <img src={getProductImageUrl(p.image)} alt={p.name} className="w-full h-full object-cover" />
+                          <img
+                            src={getProductImageUrl(p.image)}
+                            alt={p.name}
+                            className="w-full h-full object-cover"
+                            onError={(e) => {
+                              (e.target as HTMLImageElement).style.display = 'none';
+                              const parent = (e.target as HTMLElement).parentElement;
+                              if (parent && !parent.querySelector('.fallback-icon')) {
+                                const span = document.createElement('span');
+                                span.className = 'fallback-icon';
+                                span.textContent = '📦';
+                                parent.appendChild(span);
+                              }
+                            }}
+                          />
                         ) : '📦'}
                       </div>
                       <span>{p.name}</span>

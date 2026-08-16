@@ -15,6 +15,8 @@ services:
       - BETTER_AUTH_URL=http://72.61.214.92:8080
       - CORS_ORIGIN=http://72.61.214.92:8080,http://72.61.214.92,tauri://localhost,http://tauri.localhost
       - NODE_ENV=production
+    volumes:
+      - uploads_prod_data:/app/apps/api/uploads
     depends_on:
       postgres:
         condition: service_healthy
@@ -65,3 +67,4 @@ services:
 volumes:
   postgres_prod_data:
   redis_prod_data:
+  uploads_prod_data:
