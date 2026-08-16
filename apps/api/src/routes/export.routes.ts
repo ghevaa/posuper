@@ -121,7 +121,7 @@ export async function exportRoutes(app: FastifyInstance) {
       .orderBy(desc(transactions.createdAt));
 
     // Fetch all products, product variants, and category options for intelligent cost resolution
-    const [allProducts, allVariants, allCategoryOptions] = await Promise.all([
+    const [allProducts, allVariants, allCategoryOptions, allOptionGroups] = await Promise.all([
       db.select({
         id: products.id,
         name: products.name,
@@ -136,10 +136,15 @@ export async function exportRoutes(app: FastifyInstance) {
       }).from(productVariants),
       db.select({
         id: categoryOptions.id,
+        groupId: categoryOptions.groupId,
         name: categoryOptions.name,
         cost: categoryOptions.cost,
         price: categoryOptions.price,
       }).from(categoryOptions),
+      db.select({
+        id: categoryOptionGroups.id,
+        name: categoryOptionGroups.name,
+      }).from(categoryOptionGroups),
     ]);
 
     // Build lookup indexes
@@ -150,8 +155,15 @@ export async function exportRoutes(app: FastifyInstance) {
     const productById: Record<string, number> = {};
     const productByName: Record<string, number> = {};
     const categoryOptionByName: Record<string, number> = {};
+    const groupOptionCostMap: Record<string, number> = {};
+    const groupOptionPriceCostMap: Record<string, number> = {};
 
     const prodIdToName: Record<string, string> = {};
+    const groupNameById: Record<string, string> = {};
+
+    allOptionGroups.forEach(g => {
+      if (g.name) groupNameById[g.id] = g.name.toLowerCase().trim();
+    });
 
     allProducts.forEach((p) => {
       const pCost = Number(p.cost) || 0;
@@ -180,8 +192,19 @@ export async function exportRoutes(app: FastifyInstance) {
 
     allCategoryOptions.forEach((opt) => {
       const optCost = Number(opt.cost) || 0;
-      if (opt.name) {
-        categoryOptionByName[opt.name.toLowerCase().trim()] = optCost;
+      const optPrice = Math.round(Number(opt.price) || 0);
+      const gName = groupNameById[opt.groupId || ''] || '';
+      const oName = (opt.name || '').toLowerCase().trim();
+
+      if (oName) {
+        categoryOptionByName[oName] = optCost;
+      }
+      if (gName && oName) {
+        const key = `${gName} ${oName}`;
+        groupOptionCostMap[key] = optCost;
+        groupOptionPriceCostMap[`${key}__${optPrice}`] = optCost;
+        groupOptionCostMap[`+ ${key}`] = optCost;
+        groupOptionPriceCostMap[`+ ${key}__${optPrice}`] = optCost;
       }
     });
 
@@ -190,6 +213,7 @@ export async function exportRoutes(app: FastifyInstance) {
       const pNameLower = pName.toLowerCase();
       const vName = (item.variantName || '').trim();
       const vNameLower = vName.toLowerCase();
+      const itemPrice = Math.round(Number(item.price) || 0);
 
       // 1. Direct variant cost from join
       if (item.variantCost && Number(item.variantCost) > 0) {
@@ -223,6 +247,20 @@ export async function exportRoutes(app: FastifyInstance) {
       // 5. Cleaned sub-item / option check (e.g. "+ ayam crispy bbq spicy")
       const cleanName = pName.replace(/^\+\s*/, '').trim();
       const cleanNameLower = cleanName.toLowerCase();
+
+      // Check group + option exact match (e.g. "ayam crispy bbq spicy" with price 12000)
+      if (groupOptionPriceCostMap[`${cleanNameLower}__${itemPrice}`] !== undefined && groupOptionPriceCostMap[`${cleanNameLower}__${itemPrice}`] > 0) {
+        return groupOptionPriceCostMap[`${cleanNameLower}__${itemPrice}`];
+      }
+      if (groupOptionCostMap[cleanNameLower] !== undefined && groupOptionCostMap[cleanNameLower] > 0) {
+        return groupOptionCostMap[cleanNameLower];
+      }
+      if (groupOptionPriceCostMap[`${pNameLower}__${itemPrice}`] !== undefined && groupOptionPriceCostMap[`${pNameLower}__${itemPrice}`] > 0) {
+        return groupOptionPriceCostMap[`${pNameLower}__${itemPrice}`];
+      }
+      if (groupOptionCostMap[pNameLower] !== undefined && groupOptionCostMap[pNameLower] > 0) {
+        return groupOptionCostMap[pNameLower];
+      }
 
       if (categoryOptionByName[cleanNameLower] !== undefined && categoryOptionByName[cleanNameLower] > 0) {
         return categoryOptionByName[cleanNameLower];
