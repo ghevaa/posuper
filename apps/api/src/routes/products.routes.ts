@@ -135,7 +135,7 @@ export async function productRoutes(app: FastifyInstance) {
       if (Array.isArray(body.variants) && body.variants.length > 0) {
         for (const v of body.variants) {
           await db.insert(productVariants).values({
-            id: nanoid(),
+            id: v.id && !v.id.startsWith('var_') ? v.id : nanoid(),
             productId: id,
             name: v.name,
             additionalPrice: String(v.additionalPrice || 0),

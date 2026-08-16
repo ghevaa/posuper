@@ -120,6 +120,152 @@ export async function exportRoutes(app: FastifyInstance) {
       .where(whereClause)
       .orderBy(desc(transactions.createdAt));
 
+    // Fetch all products, product variants, and category options for intelligent cost resolution
+    const [allProducts, allVariants, allCategoryOptions] = await Promise.all([
+      db.select({
+        id: products.id,
+        name: products.name,
+        cost: products.cost,
+        price: products.price,
+      }).from(products),
+      db.select({
+        id: productVariants.id,
+        productId: productVariants.productId,
+        name: productVariants.name,
+        cost: productVariants.cost,
+      }).from(productVariants),
+      db.select({
+        id: categoryOptions.id,
+        name: categoryOptions.name,
+        cost: categoryOptions.cost,
+        price: categoryOptions.price,
+      }).from(categoryOptions),
+    ]);
+
+    // Build lookup indexes
+    const variantById: Record<string, number> = {};
+    const variantByProductAndName: Record<string, number> = {};
+    const variantByProductNameAndName: Record<string, number> = {};
+    const variantByName: Record<string, number> = {};
+    const productById: Record<string, number> = {};
+    const productByName: Record<string, number> = {};
+    const categoryOptionByName: Record<string, number> = {};
+
+    const prodIdToName: Record<string, string> = {};
+
+    allProducts.forEach((p) => {
+      const pCost = Number(p.cost) || 0;
+      productById[p.id] = pCost;
+      if (p.name) {
+        prodIdToName[p.id] = p.name;
+        productByName[p.name.toLowerCase().trim()] = pCost;
+      }
+    });
+
+    allVariants.forEach((v) => {
+      const vCost = Number(v.cost) || 0;
+      variantById[v.id] = vCost;
+      if (v.name) {
+        const vNameLower = v.name.toLowerCase().trim();
+        variantByName[vNameLower] = vCost;
+        if (v.productId) {
+          variantByProductAndName[`${v.productId}__${vNameLower}`] = vCost;
+          const pName = prodIdToName[v.productId];
+          if (pName) {
+            variantByProductNameAndName[`${pName.toLowerCase().trim()}__${vNameLower}`] = vCost;
+          }
+        }
+      }
+    });
+
+    allCategoryOptions.forEach((opt) => {
+      const optCost = Number(opt.cost) || 0;
+      if (opt.name) {
+        categoryOptionByName[opt.name.toLowerCase().trim()] = optCost;
+      }
+    });
+
+    function resolveItemCost(item: any): number {
+      const pName = (item.productName || '').trim();
+      const pNameLower = pName.toLowerCase();
+      const vName = (item.variantName || '').trim();
+      const vNameLower = vName.toLowerCase();
+
+      // 1. Direct variant cost from join
+      if (item.variantCost && Number(item.variantCost) > 0) {
+        return Number(item.variantCost);
+      }
+
+      // 2. Lookup by variantId
+      if (item.variantId && variantById[item.variantId] !== undefined && variantById[item.variantId] > 0) {
+        return variantById[item.variantId];
+      }
+
+      // 3. Lookup by (productId + variantName)
+      if (item.productId && vNameLower) {
+        const key = `${item.productId}__${vNameLower}`;
+        if (variantByProductAndName[key] !== undefined && variantByProductAndName[key] > 0) {
+          return variantByProductAndName[key];
+        }
+      }
+
+      // 4. Lookup by (productName + variantName) (e.g. spagetti + bolognese)
+      if (pNameLower && vNameLower && vNameLower !== 'biasa' && vNameLower !== 'biasa / regular' && vNameLower !== 'regular' && vNameLower !== '-') {
+        const key = `${pNameLower}__${vNameLower}`;
+        if (variantByProductNameAndName[key] !== undefined && variantByProductNameAndName[key] > 0) {
+          return variantByProductNameAndName[key];
+        }
+        if (variantByName[vNameLower] !== undefined && variantByName[vNameLower] > 0) {
+          return variantByName[vNameLower];
+        }
+      }
+
+      // 5. Cleaned sub-item / option check (e.g. "+ ayam crispy bbq spicy")
+      const cleanName = pName.replace(/^\+\s*/, '').trim();
+      const cleanNameLower = cleanName.toLowerCase();
+
+      if (categoryOptionByName[cleanNameLower] !== undefined && categoryOptionByName[cleanNameLower] > 0) {
+        return categoryOptionByName[cleanNameLower];
+      }
+      if (vNameLower && categoryOptionByName[vNameLower] !== undefined && categoryOptionByName[vNameLower] > 0) {
+        return categoryOptionByName[vNameLower];
+      }
+
+      // Check across variants for match in cleanName (e.g. "bbq spicy" in "+ ayam crispy bbq spicy")
+      for (const v of allVariants) {
+        const vMatch = v.name.toLowerCase().trim();
+        if (vMatch && cleanNameLower.includes(vMatch) && Number(v.cost) > 0) {
+          return Number(v.cost);
+        }
+      }
+
+      // Check across category options for match
+      for (const opt of allCategoryOptions) {
+        const optMatch = opt.name.toLowerCase().trim();
+        if (optMatch && cleanNameLower.includes(optMatch) && Number(opt.cost) > 0) {
+          return Number(opt.cost);
+        }
+      }
+
+      // 6. Direct product cost
+      if (item.productCost && Number(item.productCost) > 0) {
+        return Number(item.productCost);
+      }
+
+      // 7. Product by ID or Name
+      if (item.productId && productById[item.productId] !== undefined && productById[item.productId] > 0) {
+        return productById[item.productId];
+      }
+      if (productByName[pNameLower] !== undefined && productByName[pNameLower] > 0) {
+        return productByName[pNameLower];
+      }
+      if (productByName[cleanNameLower] !== undefined && productByName[cleanNameLower] > 0) {
+        return productByName[cleanNameLower];
+      }
+
+      return 0;
+    }
+
     // Fetch transaction items with details including variant cost
     const txIds = txList.map((t) => t.id);
     let itemsList: any[] = [];
@@ -131,7 +277,9 @@ export async function exportRoutes(app: FastifyInstance) {
         transactionId: transactionItems.transactionId,
         invoiceNo: transactions.invoiceNo,
         createdAt: transactions.createdAt,
+        productId: transactionItems.productId,
         productName: transactionItems.productName,
+        variantId: transactionItems.variantId,
         variantName: transactionItems.variantName,
         qty: transactionItems.qty,
         price: transactionItems.price,
@@ -339,7 +487,7 @@ export async function exportRoutes(app: FastifyInstance) {
       const d = it.createdAt ? new Date(it.createdAt) : new Date();
       const qtyVal = Number(it.qty) || 0;
       const priceVal = Number(it.price) || 0;
-      const costVal = Number(it.variantCost && Number(it.variantCost) > 0 ? it.variantCost : it.productCost) || 0;
+      const costVal = resolveItemCost(it);
       const subtotalVal = Number(it.subtotal) || (qtyVal * priceVal);
       const totalCostVal = qtyVal * costVal;
       const marginVal = subtotalVal - totalCostVal;
