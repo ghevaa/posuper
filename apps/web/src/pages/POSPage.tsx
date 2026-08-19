@@ -514,7 +514,7 @@ export default function POSPage() {
   const quickAmounts = [subtotal, Math.ceil(subtotal / 10000) * 10000, Math.ceil(subtotal / 50000) * 50000, 100000, 200000, 500000].filter((v, i, a) => v >= subtotal && a.indexOf(v) === i).slice(0, 6);
 
   return (
-    <div className="flex flex-col lg:flex-row gap-4 lg:gap-6 h-auto lg:h-[calc(100vh-5rem)] relative pb-20 lg:pb-0">
+    <div className="flex flex-col lg:flex-row gap-4 lg:gap-6 h-auto lg:h-[calc(100vh-5rem)] relative pb-28 lg:pb-0">
       {/* LEFT — Products */}
       <div className="flex-1 flex flex-col min-w-0">
         {/* Search + Categories + Closing Kasir Button */}
@@ -563,7 +563,7 @@ export default function POSPage() {
         </div>
 
         {/* Product Grid */}
-        <div className="flex-1 overflow-y-auto max-h-[60vh] lg:max-h-none pr-1">
+        <div className="flex-1 lg:overflow-y-auto lg:max-h-none pr-0 lg:pr-1">
           {productsLoading ? (
             <div className="flex items-center justify-center h-40"><div className="spinner" /></div>
           ) : (
@@ -781,7 +781,7 @@ export default function POSPage() {
       </div>
 
       {/* MOBILE — Floating Bottom Bar */}
-      <div className="lg:hidden fixed bottom-0 left-0 right-0 p-3 bg-[var(--color-surface-light)] border-t border-[var(--color-border)] z-30 shadow-2xl flex items-center justify-between gap-2 backdrop-blur-md">
+      <div className="lg:hidden fixed bottom-0 left-0 right-0 p-3 bg-[var(--color-surface)] border-t border-[var(--color-border)] z-30 shadow-2xl flex items-center justify-between gap-2">
         <div className="flex items-center gap-2 cursor-pointer" onClick={() => setShowMobileCart(true)}>
           <div className="relative">
             <ShoppingCart size={22} className="text-[var(--color-primary-400)]" />
